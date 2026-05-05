@@ -1,0 +1,16 @@
+{
+  "market_telemetry": {
+    "description": "Baseline wholesale Mandi prices (INR per Quintal) based on Agmarknet 2024-2025 benchmarks",
+    "commodities": [
+      { "name": "Tomato", "avg_price": 2800, "top_mandi": "Kolar (Karnataka)", "trend": "Rising" },
+      { "name": "Onion", "avg_price": 3200, "top_mandi": "Lasalgaon (Maharashtra)", "trend": "Stable" },
+      { "name": "Rice (Basmati)", "avg_price": 6500, "top_mandi": "Karnal (Haryana)", "trend": "Rising" },
+      { "name": "Wheat", "avg_price": 2450, "top_mandi": "Khanna (Punjab)", "trend": "Stable" },
+      { "name": "Cotton", "avg_price": 7200, "top_mandi": "Rajkot (Gujarat)", "trend": "Falling" },
+      { "name": "Potato", "avg_price": 1800, "top_mandi": "Agra (Uttar Pradesh)", "trend": "Stable" },
+      { "name": "Sugarcane", "avg_price": 350, "top_mandi": "Belgaum (Karnataka)", "trend": "Rising" },
+      { "name": "Chilli (Red)", "avg_price": 18000, "top_mandi": "Guntur (Andhra Pradesh)", "trend": "Rising" }
+    ],
+    "disclaimer": "Live data requires a Data.gov.in API key. Showing baseline telemetry."
+  }
+}

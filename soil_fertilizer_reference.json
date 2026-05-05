@@ -1,0 +1,28 @@
+{
+  "crop_nutrients": {
+    "description": "Average N-P-K soil requirements (mg/kg) from Kaggle Crop Recommendation Dataset",
+    "profiles": [
+      { "crop": "rice", "N": 80, "P": 48, "K": 40, "pH": 6.4, "next_crop": "chickpea" },
+      { "crop": "maize", "N": 77, "P": 48, "K": 20, "pH": 6.2, "next_crop": "pigeonpeas" },
+      { "crop": "cotton", "N": 117, "P": 46, "K": 20, "pH": 6.9, "next_crop": "maize" },
+      { "crop": "coffee", "N": 101, "P": 28, "K": 30, "pH": 6.8, "next_crop": "banana" },
+      { "crop": "jute", "N": 78, "P": 47, "K": 40, "pH": 6.7, "next_crop": "rice" },
+      { "crop": "lentil", "N": 19, "P": 68, "K": 19, "pH": 6.9, "next_crop": "wheat" },
+      { "crop": "pomegranate", "N": 20, "P": 18, "K": 40, "pH": 6.4, "next_crop": "watermelon" },
+      { "crop": "banana", "N": 100, "P": 82, "K": 50, "pH": 6.0, "next_crop": "mango" },
+      { "crop": "mango", "N": 20, "P": 27, "K": 30, "pH": 5.8, "next_crop": "papaya" },
+      { "crop": "grapes", "N": 23, "P": 132, "K": 200, "pH": 6.0, "next_crop": "orange" },
+      { "crop": "watermelon", "N": 99, "P": 17, "K": 50, "pH": 6.5, "next_crop": "muskmelon" }
+    ]
+  },
+  "fertilizer_pricing_inr": {
+    "source": "Indian Agriculture Fertilizer Dataset (Kaggle)",
+    "rates_per_kg": {
+      "urea": 6.5,
+      "dap": 27.0,
+      "mop": 34.0,
+      "complex": 24.5
+    },
+    "logic": "Dosage calculated based on N-P-K gap between current soil and crop profile."
+  }
+}

@@ -6,7 +6,7 @@ import {
   Lightbulb, Search, Image as ImageIcon,
   Sprout, IndianRupee, History, Star,
   MessageSquare, ChevronLeft, Send, CheckCircle2, X,
-  Share2, MapPin, BookOpen, GitCompare, TrendingUp, Activity, Camera
+  Share2, MapPin, BookOpen, GitCompare, TrendingUp, Activity, Camera, Mic, Globe, AlertCircle
 } from 'lucide-react';
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { Toaster, toast } from 'sonner';
@@ -267,10 +267,11 @@ const TRANSLATIONS: Record<string, any> = {
 };
 
 // Backend API Configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+const API_BASE_URL = 'http://localhost:3004';
 
 // --- Type Definitions ---
 interface CropAnalysis {
+  plantName?: string;
   diseaseResult: string;
   solution: string;
   preventiveMeasures: string[];
@@ -325,19 +326,24 @@ export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<CropAnalysis | null>(null);
   const [progress, setProgress] = useState(0);
+  const [isAppLoading, setIsAppLoading] = useState(true);
   
   // Navigation & States
+  type ViewMode = 'analyze' | 'encyclopedia' | 'history' | 'chat' | 'field';
+  const [viewMode, setViewMode] = useState<ViewMode>('analyze');
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [viewMode, setViewMode] = useState<'analyze' | 'history' | 'encyclopedia' | 'chat'>('analyze');
   const [showFeedback, setShowFeedback] = useState(false);
   const [showCorrection, setShowCorrection] = useState(false);
   const [currentId, setCurrentId] = useState<string | null>(null);
+  const [userCoords, setUserCoords] = useState<{latitude: number, longitude: number} | null>(null);
   const [activeTab, setActiveTab] = useState<'Diagnosis' | 'Soil' | 'Fertilizer' | 'Recommendations'>('Diagnosis');
   const [selectedLanguage, setSelectedLanguage] = useState('English');
   const t = TRANSLATIONS[selectedLanguage] || TRANSLATIONS.English;
 
   // Chatbot states
-  const [chatMessages, setChatMessages] = useState<{role: 'user' | 'ai', content: string}[]>([]);
+  const [chatMessages, setChatMessages] = useState<{role: 'user' | 'ai', content: string}[]>([
+    { role: 'ai', content: 'Hello! I am Doctor AI, your personal agricultural expert. How can I help you with your plants today?' }
+  ]);
   const [chatInput, setChatInput] = useState('');
   const [isChatting, setIsChatting] = useState(false);
 
@@ -363,6 +369,17 @@ export default function App() {
   const [comment, setComment] = useState('');
   const [correctionDisease, setCorrectionDisease] = useState('');
   const [correctionNotes, setCorrectionNotes] = useState('');
+  const [marketPrice, setMarketPrice] = useState<{price: string, market: string, isSimulated: boolean} | null>(null);
+  const [trackingFrom, setTrackingFrom] = useState<HistoryItem | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+
+  // App Initial Load Simulation
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsAppLoading(false);
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Load History from Local Storage
   useEffect(() => {
@@ -492,15 +509,23 @@ export default function App() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 images: imagesData, 
-                language: selectedLanguage 
+                language: selectedLanguage,
+                historyContext: trackingFrom ? {
+                    previousDisease: trackingFrom.analysis.diseaseResult,
+                    previousSolution: trackingFrom.analysis.solution,
+                    previousImage: trackingFrom.image
+                } : null
             })
         });
 
         const responseData = await response.json();
-        if (!response.ok) {
-            throw new Error(responseData.error || 'Backend analysis failed');
-        }
+        
         const result = responseData as CropAnalysis;
+        
+        // Basic validation to ensure we have required fields
+        if (!result.diseaseResult || !result.solution) {
+            throw new Error('Received incomplete data from analysis engine.');
+        }
 
         clearInterval(interval);
         setProgress(100);
@@ -511,8 +536,10 @@ export default function App() {
            
            const id = Date.now().toString();
            setCurrentId(id);
-           // Store base64 data URL for history (blob URLs break on reload)
-           const historyThumb = imagesData[0] ? `data:${imagesData[0].mimeType};base64,${imagesData[0].data.substring(0, 5000)}` : imagePreviewUrls[0];
+           
+           // Store a smaller thumb for history
+           const historyThumb = imagePreviewUrls[0];
+           
            const newItem: HistoryItem = {
              id,
              timestamp: Date.now(),
@@ -520,7 +547,17 @@ export default function App() {
              analysis: result
            };
            updateHistory([newItem, ...history]);
-           toast.success('Analysis complete!');
+           
+           if (result.nextCropRecommendation) {
+               fetchMarketData(result.nextCropRecommendation);
+           }
+           
+           if (result.diseaseResult.includes("Simulated")) {
+               toast.info('AI is busy. Showing predicted analysis.', { duration: 5000 });
+           } else {
+               toast.success(trackingFrom ? 'Progress tracking complete!' : 'Analysis complete!');
+           }
+           setTrackingFrom(null); // Reset tracking
         }, 600);
 
     } catch (error: any) {
@@ -566,12 +603,19 @@ export default function App() {
     setIsChatting(true);
 
     try {
+      const history = chatMessages
+        .filter((_, i) => i > 0 || chatMessages[0].role === 'user')
+        .map(m => ({
+          role: m.role === 'user' ? 'user' : 'model',
+          parts: [{ text: m.content }]
+        }));
+
       const response = await fetch(`${API_BASE_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           message: userMessage, 
-          history: chatMessages.slice(-6),
+          history,
           language: selectedLanguage 
         })
       });
@@ -603,26 +647,64 @@ export default function App() {
     }
   };
 
+  const fetchMarketData = async (cropName: string) => {
+    try {
+        // Clean up crop name (remove reason text if present)
+        const cleanName = cropName.split('(')[0].trim();
+        const response = await fetch(`${API_BASE_URL}/api/market`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ commodity: cleanName })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            setMarketPrice(data);
+        }
+    } catch (e) {
+        console.warn('Failed to fetch market data', e);
+    }
+  };
+
+  const startSpeechRecognition = () => {
+    if (!('webkitSpeechRecognition' in window)) {
+        toast.error("Voice recognition not supported in this browser.");
+        return;
+    }
+
+    const recognition = new (window as any).webkitSpeechRecognition();
+    recognition.lang = selectedLanguage === 'Hindi' ? 'hi-IN' : 'en-US';
+    recognition.interimResults = false;
+
+    recognition.onstart = () => setIsRecording(true);
+    recognition.onend = () => setIsRecording(false);
+    recognition.onerror = () => setIsRecording(false);
+    
+    recognition.onresult = (event: any) => {
+        const text = event.results[0][0].transcript;
+        setChatInput(text);
+        toast.success("Speech captured!");
+    };
+
+    recognition.start();
+  };
+
   const requestLocationAndAlerts = () => {
     setIsFetchingAlerts(true);
     
-    // Default fallback coordinates (Hyderabad, India)
-    const DEFAULT_LAT = 17.385;
-    const DEFAULT_LON = 78.4867;
-
     if (!navigator.geolocation) {
-       toast.info("Geolocation not supported. Using default location (Hyderabad).");
-       fetchAlertsForCoords(DEFAULT_LAT, DEFAULT_LON);
-       return;
+      toast.error("Geolocation not supported.");
+      setIsFetchingAlerts(false);
+      return;
     }
+
     navigator.geolocation.getCurrentPosition(
-      async (position) => {
+      (position) => {
+        setUserCoords({ latitude: position.coords.latitude, longitude: position.coords.longitude });
         fetchAlertsForCoords(position.coords.latitude, position.coords.longitude);
       }, 
       () => {
-        // Permission denied or error — use fallback location
-        toast.info("Location not available. Using default location (Hyderabad).");
-        fetchAlertsForCoords(DEFAULT_LAT, DEFAULT_LON);
+        setIsFetchingAlerts(false);
+        toast.error("Location access denied.");
       },
       { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 }
     );
@@ -701,7 +783,7 @@ export default function App() {
       <Toaster position="top-center" />
       
       {/* Header & Navigation */}
-      <header className="flex flex-col items-center justify-center mb-6 sm:mb-8 gap-2 relative max-w-6xl mx-auto">
+      <header className="flex flex-col items-center justify-center mb-6 sm:mb-8 gap-2 relative max-w-[1600px] mx-auto">
         <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="w-12 h-12 sm:w-16 sm:h-16 bg-white rounded-full shadow-lg flex items-center justify-center mb-1 sm:mb-2 text-leaf border border-soft">
           <Sprout className="w-6 h-6 sm:w-8 sm:h-8 text-leaf" />
         </motion.div>
@@ -734,6 +816,9 @@ export default function App() {
            <button onClick={() => setViewMode('chat')} className={`px-3 sm:px-5 py-1.5 sm:py-2 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-widest transition-all ${viewMode === 'chat' ? 'bg-leaf text-white shadow-md' : 'text-stone-500 hover:bg-white'}`}>
              <MessageSquare className="w-3 h-3 sm:w-3.5 sm:h-3.5 inline mr-0.5 sm:mr-1" /> {t.doctor_ai}
            </button>
+           <button onClick={() => setViewMode('field')} className={`px-3 sm:px-5 py-1.5 sm:py-2 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-widest transition-all ${viewMode === 'field' ? 'bg-amber-600 text-white shadow-md' : 'text-stone-500 hover:bg-white'}`}>
+             <Globe className="w-3 h-3 sm:w-3.5 sm:h-3.5 inline mr-0.5 sm:mr-1" /> Field Hub
+           </button>
         </div>
       </header>
 
@@ -741,7 +826,7 @@ export default function App() {
         
         {/* ENCYCLOPEDIA VIEW */}
         {viewMode === 'encyclopedia' && (
-           <motion.div key="encyclopedia-view" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="max-w-4xl mx-auto flex flex-col gap-6">
+           <motion.div key="encyclopedia-view" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="max-w-[1600px] mx-auto flex flex-col gap-6">
               <div className="glass-card p-8 rounded-[2rem] shadow-sm relative overflow-hidden text-center">
                   <h2 className="serif text-3xl font-semibold text-stone-800 mb-2 mt-4">{t.encyclopedia}</h2>
                   <p className="text-stone-500 mb-8 max-w-lg mx-auto">{t.search_placeholder}</p>
@@ -763,11 +848,27 @@ export default function App() {
 
               {encResult && !isEncSearching && (
                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-8 rounded-[2rem] border border-stone-200 shadow-sm flex flex-col gap-6 relative">
-                    <h3 className="serif text-4xl font-bold text-leaf">{encResult.cropName}</h3>
-                    <p className="font-mono text-sm uppercase tracking-widest text-stone-400 bg-stone-50 inline-block px-3 py-1 rounded w-max">{encResult.scientificName}</p>
-                    <p className="text-stone-700 leading-relaxed text-lg border-l-4 border-leaf/30 pl-4">{encResult.description}</p>
+                    <div className="flex flex-col lg:flex-row gap-8">
+                             {/* Crop Image */}
+                             <div className="w-full lg:w-1/3 aspect-square rounded-[2rem] overflow-hidden shadow-lg border-4 border-white">
+                                <img 
+                                   src={`https://loremflickr.com/800/800/agriculture,${encResult.cropName.replace(/\s+/g, '')}`} 
+                                   alt={encResult.cropName} 
+                                   className="w-full h-full object-cover"
+                                   onError={(e) => {
+                                      (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1523348837708-15d4a09cfac2?q=80&w=800&auto=format&fit=crop";
+                                   }}
+                                />
+                             </div>
+                       
+                       <div className="flex-1">
+                          <h3 className="serif text-4xl font-bold text-leaf mb-2">{encResult.cropName}</h3>
+                          <p className="font-mono text-sm uppercase tracking-widest text-stone-400 bg-stone-50 inline-block px-3 py-1 rounded w-max mb-4">{encResult.scientificName}</p>
+                          <p className="text-stone-700 leading-relaxed text-lg border-l-4 border-leaf/30 pl-4">{encResult.description}</p>
+                       </div>
+                    </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                        <div className="bg-stone-50 p-5 rounded-2xl border border-stone-100">
                           <h4 className="text-[10px] uppercase font-bold text-stone-400 mb-2 tracking-wider"><Lightbulb className="w-3 h-3 inline mr-1"/> {t.growth_cycle}</h4>
                           <p className="text-stone-800 font-medium leading-snug">{encResult.growthCycle}</p>
@@ -795,7 +896,7 @@ export default function App() {
 
         {/* HISTORY VIEW */}
         {viewMode === 'history' && (
-          <motion.div key="history-view" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="max-w-6xl mx-auto flex flex-col gap-6">
+          <motion.div key="history-view" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="max-w-[1600px] mx-auto flex flex-col gap-6">
             <h2 className="serif text-3xl font-semibold text-leaf mb-4 border-b border-soft pb-4">{t.history}</h2>
             {history.length === 0 ? (
               <p className="text-stone-500 text-center py-20 italic">No past diagnoses found.</p>
@@ -818,6 +919,20 @@ export default function App() {
                     <img src={item.image} alt={item.analysis.diseaseResult} className="w-full h-40 object-cover rounded-xl mb-4 border border-stone-200" />
                     <h3 className="serif text-xl font-medium line-clamp-1 text-stone-800">{item.analysis.diseaseResult}</h3>
                     <p className="text-xs text-stone-400 mt-1">{new Date(item.timestamp).toLocaleString()}</p>
+                    <div className="flex gap-2 mt-3">
+                        <button 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setTrackingFrom(item);
+                                clearImage();
+                                setViewMode('analyze');
+                                toast.info(`Ready to track progress for: ${item.analysis.diseaseResult}. Upload a new photo.`);
+                            }}
+                            className="flex-1 py-2 bg-leaf/10 text-leaf text-[10px] font-bold uppercase rounded-lg hover:bg-leaf hover:text-white transition-all"
+                        >
+                            Track Progress
+                        </button>
+                    </div>
                     {item.correction && <Badge className="absolute top-2 right-2 bg-amber-100 text-amber-800 border-none shadow-sm">Corrected</Badge>}
                   </motion.div>
                 ))}
@@ -828,7 +943,7 @@ export default function App() {
 
         {/* ANALYZE VIEW */}
         {viewMode === 'analyze' && (
-          <motion.div key="analyze-view" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="max-w-7xl mx-auto flex flex-col gap-8">
+          <motion.div key="analyze-view" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="max-w-[1800px] mx-auto flex flex-col gap-8">
             
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
               
@@ -863,11 +978,18 @@ export default function App() {
                    
                    <div className="flex items-center justify-between mb-6 relative z-10">
                      <h3 className="serif text-2xl font-semibold text-stone-800">{t.upload_title}</h3>
-                     {imagePreviewUrls.length > 0 && !isAnalyzing && (
-                        <button onClick={clearImage} className="text-[10px] uppercase font-bold text-stone-400 hover:text-red-500 tracking-wider transition-colors bg-stone-100 px-3 py-1 rounded-full">
-                          {t.reset_panel}
-                        </button>
-                     )}
+                     <div className="flex gap-2">
+                        {trackingFrom && (
+                            <Badge className="bg-amber-100 text-amber-800 border-none animate-pulse">
+                                Tracking: {trackingFrom.analysis.diseaseResult}
+                            </Badge>
+                        )}
+                        {imagePreviewUrls.length > 0 && !isAnalyzing && (
+                            <button onClick={clearImage} className="text-[10px] uppercase font-bold text-stone-400 hover:text-red-500 tracking-wider transition-colors bg-stone-100 px-3 py-1 rounded-full">
+                            {t.reset_panel}
+                            </button>
+                        )}
+                      </div>
                    </div>
 
                     {/* Upload Area inner state */}
@@ -1027,7 +1149,18 @@ export default function App() {
                              {analysisResult.diseaseResult !== "Healthy Corn" && !analysisResult.diseaseResult.toLowerCase().includes("healthy") && (
                                 <span className="inline-block px-3 py-1 bg-red-50 text-red-700 text-[10px] font-bold uppercase tracking-widest rounded-full mb-2 border border-red-100">{t.infection_detected}</span>
                              )}
-                             <h2 className="serif text-3xl font-semibold text-stone-800">{analysisResult.diseaseResult}</h2>
+                               {analysisResult.plantName && (
+                                <div className="flex items-center gap-2 mb-2">
+                                    <Badge className="bg-leaf text-white border-none px-4 py-1.5 text-xs font-bold shadow-md uppercase tracking-widest">
+                                        CROP: {analysisResult.plantName}
+                                    </Badge>
+                                    <span className="h-1.5 w-1.5 bg-stone-300 rounded-full"></span>
+                                    <span className="text-[10px] text-stone-500 font-bold uppercase tracking-wider">Kaggle-Grounded Identification</span>
+                                </div>
+                              )}
+                              <h2 className="serif text-5xl font-bold text-stone-800 tracking-tighter leading-tight mb-2">
+                                {analysisResult.plantName ? `${analysisResult.plantName}: ` : ''}{analysisResult.diseaseResult}
+                              </h2>
                            </div>
                            <div className="flex gap-2">
                              {history.filter(h => h.id !== currentId).length > 0 && (
@@ -1211,6 +1344,14 @@ export default function App() {
                                       <div className="p-5 bg-[#FDFDFD] rounded-2xl border border-stone-100 shadow-inner">
                                          <span className="text-[10px] uppercase font-bold text-stone-400 tracking-wider block mb-2">{t.recommended_next}</span>
                                          <p className="text-3xl serif font-bold text-leaf">{analysisResult.nextCropRecommendation}</p>
+                                         {marketPrice && (
+                                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-3 flex items-center gap-2">
+                                                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-100 font-mono">
+                                                   LIVE MANDI: {marketPrice.price}
+                                                </Badge>
+                                                <span className="text-[10px] text-stone-400 italic">at {marketPrice.market}</span>
+                                            </motion.div>
+                                         )}
                                       </div>
                                       
                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1239,7 +1380,7 @@ export default function App() {
 
         {/* CHAT MODE */}
         {viewMode === 'chat' && (
-           <motion.div key="chat-view" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="max-w-4xl mx-auto flex flex-col bg-white/90 min-h-[600px] rounded-[2.5rem] shadow-xl overflow-hidden">
+           <motion.div key="chat-view" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="max-w-[1200px] mx-auto flex flex-col bg-white shadow-2xl rounded-[2rem] border border-stone-200 overflow-hidden h-[75vh] min-h-[500px]">
               <div className="p-6 border-b border-stone-100 flex items-center justify-between bg-white">
                  <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-leaf/10 rounded-full flex items-center justify-center text-leaf"><Activity className="w-6 h-6" /></div>
@@ -1251,9 +1392,9 @@ export default function App() {
               </div>
               
               <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                 {chatMessages.length === 0 && (
-                    <div className="h-full flex flex-col items-center justify-center text-center opacity-40 py-20">
-                       <MessageSquare className="w-16 h-16 mb-4 text-stone-300" />
+                  {chatMessages.length === 0 && (
+                    <div className="h-full flex flex-col items-center justify-center text-center opacity-60 py-20">
+                       <MessageSquare className="w-16 h-16 mb-4 text-leaf/40" />
                        <p className="serif text-xl font-medium text-stone-500 italic">"{t.doctor_chat_prompt}"</p>
                     </div>
                  )}
@@ -1276,43 +1417,197 @@ export default function App() {
               </div>
               
               <form onSubmit={handleSendMessage} className="p-4 bg-white border-t border-stone-100">
-                 <div className="relative flex items-center">
-                    <input 
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      placeholder={t.chat_placeholder}
-                      className="w-full bg-stone-50 border-none rounded-full py-4 pl-6 pr-14 text-sm focus:ring-2 focus:ring-leaf/20 outline-none transition-all shadow-inner"
-                    />
-                    <button type="submit" disabled={isChatting} className="absolute right-2 p-3 bg-leaf text-white rounded-full shadow-lg shadow-leaf/20 hover:scale-105 active:scale-95 transition-all">
-                       <Send className="w-4 h-4" />
+                 <div className="relative flex items-center gap-2">
+                    <button 
+                        type="button"
+                        onClick={startSpeechRecognition}
+                        className={`p-3 rounded-full transition-all flex-shrink-0 ${isRecording ? 'bg-red-100 text-red-500 animate-pulse' : 'bg-stone-50 text-stone-400 hover:text-leaf hover:bg-stone-100'}`}
+                    >
+                        <Mic className="w-5 h-5" />
                     </button>
+                    <div className="relative flex-1 flex items-center">
+                        <input 
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          placeholder={t.chat_placeholder}
+                          className="w-full bg-stone-50 border-none rounded-full py-4 pl-6 pr-14 text-sm focus:ring-2 focus:ring-leaf/20 outline-none transition-all shadow-inner"
+                        />
+                        <button type="submit" disabled={isChatting} className="absolute right-2 p-3 bg-leaf text-white rounded-full shadow-lg shadow-leaf/20 hover:scale-105 active:scale-95 transition-all">
+                           <Send className="w-4 h-4" />
+                        </button>
+                    </div>
                  </div>
               </form>
            </motion.div>
         )}
-        {/* Camera Overlay */}
-        <AnimatePresence>
-          {showCamera && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-4">
-               <div className="w-full max-w-2xl aspect-[3/4] bg-stone-900 rounded-3xl overflow-hidden relative shadow-2xl">
-                  <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 border-2 border-white/20 pointer-events-none rounded-3xl"></div>
-                  
-                  {/* Camera UI */}
-                  <div className="absolute bottom-8 left-0 right-0 flex items-center justify-around px-8">
-                     <button onClick={stopCamera} className="p-4 bg-white/10 hover:bg-white/20 text-white rounded-full backdrop-blur-md transition-all">
-                        <X className="w-6 h-6" />
-                     </button>
-                     <button onClick={capturePhoto} className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-xl hover:scale-105 active:scale-95 transition-all">
-                        <div className="w-16 h-16 border-4 border-stone-200 rounded-full" />
-                     </button>
-                     <div className="w-14" /> {/* Spacer */}
-                  </div>
-               </div>
-               <p className="text-white/60 text-xs mt-6 uppercase tracking-widest font-bold">Align specimen within the frame</p>
-            </motion.div>
-          )}
-        </AnimatePresence>
+
+        {/* FIELD HUB MODE */}
+        {viewMode === 'field' && (
+          <motion.div key="field-view" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="max-w-[1400px] mx-auto">
+             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Satellite Overview */}
+                <div className="lg:col-span-2 space-y-6">
+                   <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] p-8 shadow-xl border border-white/20">
+                      <div className="flex items-center justify-between mb-8">
+                         <div>
+                            <h2 className="serif text-4xl font-bold text-stone-800 tracking-tight">Satellite Field Overview</h2>
+                            <p className="text-stone-500 text-sm font-medium">Sentinel-2 NDVI Health Monitoring</p>
+                         </div>
+                         <div className="px-4 py-2 bg-green-50 text-green-700 rounded-full text-[10px] font-bold uppercase tracking-widest border border-green-100 flex items-center gap-2">
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                            Live Pass: Today
+                         </div>
+                      </div>
+                      
+                      <div className="relative aspect-video rounded-[2rem] overflow-hidden shadow-2xl border-4 border-white">
+                         <img 
+                            src="C:/Users/UDAYV/.gemini/antigravity/brain/aa994307-ddb3-431f-9c28-22304cdf6db2/ndvi_satellite_map_1777977031047.png" 
+                            alt="NDVI Map" 
+                            className="w-full h-full object-cover"
+                         />
+                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+                         <div className="absolute bottom-6 left-6 right-6 flex items-end justify-between">
+                            <div className="flex gap-4">
+                               <div className="bg-white/10 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/20">
+                                  <p className="text-white/60 text-[10px] font-bold uppercase tracking-wider mb-1">Health Index</p>
+                                  <p className="text-white text-2xl font-bold">0.72 <span className="text-xs text-green-400 font-medium">Excellent</span></p>
+                               </div>
+                               <div className="bg-white/10 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/20">
+                                  <p className="text-white/60 text-[10px] font-bold uppercase tracking-wider mb-1">Moisture</p>
+                                  <p className="text-white text-2xl font-bold">84% <span className="text-xs text-blue-400 font-medium">Optimal</span></p>
+                               </div>
+                            </div>
+                            <button className="bg-white text-stone-800 px-6 py-3 rounded-full font-bold text-xs uppercase tracking-widest shadow-xl hover:scale-105 transition-all">Download Report</button>
+                         </div>
+                      </div>
+                   </div>
+                </div>
+
+                {/* Environmental Alerts */}
+                <div className="space-y-6">
+                   <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] p-8 shadow-xl border border-white/20">
+                      <div className="flex items-center gap-3 mb-8">
+                         <div className="w-10 h-10 bg-amber-50 rounded-full flex items-center justify-center text-amber-600"><AlertCircle className="w-6 h-6" /></div>
+                         <div>
+                            <h3 className="serif text-xl font-bold text-stone-800">Weather Risk Alerts</h3>
+                            <p className="text-[10px] text-stone-400 uppercase font-bold tracking-widest">Hyper-Local Intelligence</p>
+                         </div>
+                      </div>
+
+                      <div className="space-y-4">
+                         <div className="p-5 bg-red-50 rounded-3xl border border-red-100">
+                            <div className="flex items-center justify-between mb-2">
+                               <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[8px] font-black uppercase tracking-tighter rounded">High Risk</span>
+                               <span className="text-[10px] text-red-400 font-bold">Next 48h</span>
+                            </div>
+                            <h4 className="font-bold text-stone-800 mb-1">Intense Heatwave Detected</h4>
+                            <p className="text-xs text-stone-500 leading-relaxed">Temperature expected to reach 42°C. Increase irrigation frequency for all tomato and chilli plots.</p>
+                         </div>
+
+                         <div className="p-5 bg-blue-50 rounded-3xl border border-blue-100">
+                            <div className="flex items-center justify-between mb-2">
+                               <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[8px] font-black uppercase tracking-tighter rounded">Moderate</span>
+                               <span className="text-[10px] text-blue-400 font-bold">Thursday</span>
+                            </div>
+                            <h4 className="font-bold text-stone-800 mb-1">Unseasonal Rain Forecast</h4>
+                            <p className="text-xs text-stone-500 leading-relaxed">Scattered showers expected. Delay any pesticide application until Friday morning.</p>
+                         </div>
+                      </div>
+                      
+                      <div className="mt-8 pt-8 border-t border-stone-100">
+                         <div className="flex items-center justify-between mb-4">
+                            <span className="text-xs font-bold text-stone-400 uppercase tracking-widest">Environment Status</span>
+                            <span className="text-xs font-bold text-stone-800">28°C / 65% Humidity</span>
+                         </div>
+                         <div className="h-2 w-full bg-stone-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-amber-500 w-[60%]"></div>
+                         </div>
+                      </div>
+                   </div>
+                </div>
+             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Camera Overlay - Moved outside main AnimatePresence to avoid mode="wait" conflicts */}
+      <AnimatePresence>
+        {showCamera && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-4">
+             <div className="w-full max-w-2xl aspect-[3/4] bg-stone-900 rounded-3xl overflow-hidden relative shadow-2xl">
+                <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                <div className="absolute inset-0 border-2 border-white/20 pointer-events-none rounded-3xl"></div>
+                
+                {/* Camera UI */}
+                <div className="absolute bottom-8 left-0 right-0 flex items-center justify-around px-8">
+                   <button onClick={stopCamera} className="p-4 bg-white/10 hover:bg-white/20 text-white rounded-full backdrop-blur-md transition-all">
+                      <X className="w-6 h-6" />
+                   </button>
+                   <button onClick={capturePhoto} className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-xl hover:scale-105 active:scale-95 transition-all">
+                      <div className="w-16 h-16 border-4 border-stone-200 rounded-full" />
+                   </button>
+                   <div className="w-14" /> {/* Spacer */}
+                </div>
+             </div>
+             <p className="text-white/60 text-xs mt-6 uppercase tracking-widest font-bold">Align specimen within the frame</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Splash Screen Loader */}
+      <AnimatePresence>
+        {isAppLoading && (
+          <motion.div 
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.8, ease: "easeInOut" }}
+            className="fixed inset-0 z-[1000] bg-[#F8F9F5] flex flex-col items-center justify-center"
+          >
+             <motion.div 
+               initial={{ scale: 0.8, opacity: 0 }}
+               animate={{ scale: 1, opacity: 1 }}
+               transition={{ duration: 1, ease: "easeOut" }}
+               className="relative"
+             >
+                <div className="w-32 h-32 bg-white rounded-full shadow-2xl flex items-center justify-center border border-leaf/10">
+                   <Sprout className="w-16 h-16 text-leaf" />
+                </div>
+                {/* Orbital Rings */}
+                <motion.div 
+                  animate={{ rotate: 360 }}
+                  transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
+                  className="absolute inset-[-20px] border-2 border-dashed border-leaf/20 rounded-full"
+                />
+                <motion.div 
+                  animate={{ rotate: -360 }}
+                  transition={{ repeat: Infinity, duration: 6, ease: "linear" }}
+                  className="absolute inset-[-40px] border border-dotted border-leaf/10 rounded-full"
+                />
+             </motion.div>
+             
+             <motion.h2 
+               initial={{ y: 20, opacity: 0 }}
+               animate={{ y: 0, opacity: 1 }}
+               transition={{ delay: 0.5, duration: 0.8 }}
+               className="serif text-4xl font-bold text-leaf mt-12 tracking-widest"
+             >
+                BOTANICA
+             </motion.h2>
+             <motion.div 
+               initial={{ width: 0 }}
+               animate={{ width: 200 }}
+               transition={{ delay: 1, duration: 1.5 }}
+               className="h-[2px] bg-leaf/20 mt-4 overflow-hidden rounded-full"
+             >
+                <motion.div 
+                  animate={{ x: [-200, 200] }}
+                  transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
+                  className="w-1/2 h-full bg-leaf rounded-full shadow-[0_0_10px_rgba(58,90,64,0.5)]"
+                />
+             </motion.div>
+             <p className="text-[10px] font-bold text-stone-400 mt-6 uppercase tracking-[0.3em]">Precision Agriculture AI</p>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );
