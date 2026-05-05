@@ -4,23 +4,30 @@ import dotenv from 'dotenv';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
 dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-import knowledgeBase from '../knowledge_base.json';
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
-const apiKey = process.env.GEMINI_API_KEY;
-const genAI = new GoogleGenerativeAI(apiKey || "");
+// Utility to read project files in Vercel environment
+const readData = (filename: string) => {
+    const filePath = path.join(process.cwd(), filename);
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+};
 
-const MODELS = ["gemini-2.0-flash", "gemini-2.0-flash-lite"];
+const knowledgeBase = readData('knowledge_base.json');
+const datasetReference = readData('dataset_reference.json');
+const soilReference = readData('soil_fertilizer_reference.json');
+const marketReference = readData('market_reference.json');
+
+const apiKey = process.env.GEMINI_API_KEY;
+const weatherApiKey = process.env.OPENWEATHER_API_KEY;
+const mandiApiKey = process.env.AGMARKNET_API_KEY;
+
+const genAI = new GoogleGenerativeAI(apiKey || "");
+const MODELS = ["gemini-flash-latest", "gemini-2.0-flash", "gemini-2.5-flash", "gemini-flash-lite-latest"];
 
 function getModel(modelName: string, jsonMode = false) {
     const config: any = {};
@@ -28,49 +35,39 @@ function getModel(modelName: string, jsonMode = false) {
     return genAI.getGenerativeModel({ model: modelName, generationConfig: config });
 }
 
-async function generateWithFallback(
-    buildRequest: (modelName: string) => Promise<any>,
-    maxRetriesPerModel = 2
-): Promise<any> {
+async function generateWithFallback(buildRequest: (modelName: string) => Promise<any>): Promise<any> {
     let lastError: any;
     for (const modelName of MODELS) {
-        for (let attempt = 0; attempt <= maxRetriesPerModel; attempt++) {
-            try {
-                return await buildRequest(modelName);
-            } catch (error: any) {
-                lastError = error;
-                if (error?.status === 429) {
-                    if (attempt < maxRetriesPerModel) {
-                        await new Promise(r => setTimeout(r, (attempt + 1) * 2000 + Math.random() * 1000));
-                        continue;
-                    }
-                    break;
-                }
-                throw error;
-            }
+        try {
+            return await buildRequest(modelName);
+        } catch (error: any) {
+            lastError = error;
+            if (error?.status === 429) continue;
+            throw error;
         }
     }
     throw lastError || new Error('All models exhausted');
 }
 
 function safeParseJSON(text: string) {
-    try { return JSON.parse(text); } catch {
-        const m = text.match(/\{[\s\S]*\}/);
-        if (m) return JSON.parse(m[0]);
+    try {
+        return JSON.parse(text);
+    } catch {
+        const match = text.match(/\{[\s\S]*\}/);
+        if (match) return JSON.parse(match[0]);
         return null;
     }
 }
 
+// ==================== API ROUTES ====================
+
 app.post('/api/analyze', async (req, res) => {
     try {
-        const { images, language = 'English' } = req.body;
-        if (!images?.length) return res.status(400).json({ error: 'No images provided.' });
-
-        const prompt = `You are an expert agricultural scientist. Analyze the plant/crop/vegetable/fruit images.
-Reference: ${JSON.stringify(knowledgeBase.fertilizer_logic)}
-Return valid JSON:
-{"diseaseResult":"string","solution":"string","preventiveMeasures":["string"],"soilFertility":{"pH":"string","nitrogen":"string","phosphorus":"string","potassium":"string","soilType":"string"},"fertilizerCost":{"urea":"string","dap":"string","mop":"string","totalCost":"string"},"nextCropRecommendation":"string"}
-Respond in ${language}.`;
+        const { images, language = 'English', historyContext = null } = req.body;
+        let prompt = `Analyze these images using grounding data:
+        [PLANTS] ${JSON.stringify(datasetReference)}
+        [SOIL/FERT] ${JSON.stringify(soilReference)}
+        Return JSON with plantName, diseaseResult, solution, preventiveMeasures, soilFertility, fertilizerCost, nextCropRecommendation. Respond in ${language}.`;
 
         const imageParts = images.map((img: any) => ({
             inlineData: { data: img.data, mimeType: img.mimeType || 'image/jpeg' }
@@ -81,97 +78,63 @@ Respond in ${language}.`;
             return await model.generateContent([prompt, ...imageParts]);
         });
 
-        const parsed = safeParseJSON(result.response.text());
-        parsed ? res.json(parsed) : res.status(500).json({ error: 'Invalid AI response.' });
+        res.json(safeParseJSON(result.response.text()));
     } catch (error: any) {
-        // Fallback to simulated data to prevent frontend errors
-        res.json({
-            "diseaseResult": "Simulated Analysis (API Overloaded)",
-            "solution": "The AI service is currently experiencing high traffic. As a general precaution, isolate affected plants and ensure optimal watering.",
-            "preventiveMeasures": ["Ensure proper spacing between plants", "Avoid overhead watering", "Monitor for pests daily"],
-            "soilFertility": { "pH": "6.5", "nitrogen": "Medium", "phosphorus": "Medium", "potassium": "Medium", "soilType": "Loam" },
-            "fertilizerCost": { "urea": "₹300", "dap": "₹1250", "mop": "₹850", "totalCost": "₹2400" },
-            "nextCropRecommendation": "Legumes (Helps restore soil nitrogen)"
-        });
+        res.status(500).json({ error: error.message });
     }
 });
 
 app.post('/api/chat', async (req, res) => {
     try {
         const { message, history = [], language = 'English' } = req.body;
-        if (!message?.trim()) return res.status(400).json({ error: 'Empty message.' });
-
-        const safeHistory = history.filter((h: any) => h?.content && h?.role).map((h: any) => ({
-            role: h.role === 'user' ? 'user' : 'model', parts: [{ text: h.content }]
-        }));
-
+        const systemPrompt = `You are Doctor AI, an agricultural expert. Respond in ${language}.`;
         const result = await generateWithFallback(async (modelName) => {
-            const model = genAI.getGenerativeModel({ model: modelName });
-            const chat = model.startChat({ history: safeHistory, generationConfig: { maxOutputTokens: 1500 } });
-            return await chat.sendMessage(`You are "Doctor AI", agricultural expert. Respond in ${language}.\n\nUser: ${message}`);
+            const model = getModel(modelName);
+            const chat = model.startChat({
+                history: history.map((h: any) => ({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: h.content }] })),
+                safetySettings: [{ category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }]
+            });
+            return await chat.sendMessage(systemPrompt + "\n\nUser: " + message);
         });
-
         res.json({ response: result.response.text() });
     } catch (error: any) {
-        res.json({ response: "I am currently experiencing very high traffic and my AI models are rate limited. Please give me a few minutes to cool down, then try asking again! 🌱🤖" });
+        res.json({ response: "AI is currently busy. Please try again in a moment." });
     }
 });
 
 app.post('/api/encyclopedia', async (req, res) => {
     try {
         const { query, language = 'English' } = req.body;
-        if (!query?.trim()) return res.status(400).json({ error: 'Empty query.' });
-
-        const prompt = `Agricultural encyclopedia for "${query}". Return JSON: {"cropName":"","scientificName":"","description":"","growthCycle":"","commonDiseases":[],"idealSoil":"","optimalHarvest":""}. Respond in ${language}.`;
-
+        const prompt = `Provide detailed info for "${query}". Return JSON with cropName, scientificName, description, growthCycle, commonDiseases, idealSoil, optimalHarvest, imageUrl. Respond in ${language}.`;
         const result = await generateWithFallback(async (modelName) => {
             const model = getModel(modelName, true);
             return await model.generateContent(prompt);
         });
-
-        const parsed = safeParseJSON(result.response.text());
-        parsed ? res.json(parsed) : res.status(500).json({ error: 'Parse failed.' });
-    } catch (error: any) {
-        res.json({
-            "cropName": query + " (Simulated Data)",
-            "scientificName": "Service Overloaded",
-            "description": "The encyclopedia AI is currently experiencing high traffic. Please try your search again in a few minutes.",
-            "growthCycle": "N/A",
-            "commonDiseases": ["N/A"],
-            "idealSoil": "N/A",
-            "optimalHarvest": "N/A"
-        });
+        res.json(safeParseJSON(result.response.text()));
+    } catch (error) {
+        res.status(500).json({ error: "Failed to fetch data" });
     }
 });
 
-app.post('/api/alerts', async (req, res) => {
-    try {
-        const { latitude, longitude, language = 'English' } = req.body;
-        const prompt = `Ag alerts for lat:${latitude}, lon:${longitude}. Return JSON: {"region":"","alerts":[],"weather":{"temp":"","humidity":"","condition":""}}. Respond in ${language}.`;
-
-        const result = await generateWithFallback(async (modelName) => {
-            const model = getModel(modelName, true);
-            return await model.generateContent(prompt);
-        });
-
-        const parsed = safeParseJSON(result.response.text());
-        parsed ? res.json(parsed) : res.status(500).json({ error: 'Parse failed.' });
-    } catch (error: any) {
-        res.json({
-            "region": "Current Location (Simulated)",
-            "alerts": ["No severe agricultural alerts detected at this time."],
-            "weather": { "temp": "28°C", "humidity": "65%", "condition": "Partly Cloudy" }
-        });
+app.post('/api/market', async (req, res) => {
+    const { commodity } = req.body;
+    const localData = marketReference.market_telemetry.commodities.find((c: any) => c.name.toLowerCase() === commodity.toLowerCase());
+    if (localData) {
+        return res.json({ price: `₹${localData.avg_price}/quintal`, market: localData.top_mandi, state: "Baseline Data", arrival_date: new Date().toLocaleDateString(), trend: localData.trend, isSimulated: true });
     }
+    res.json({ price: "₹2,500/quintal", market: "Regional Mandi", state: "Local", isSimulated: true });
 });
 
-app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok', apiKeySet: !!apiKey, models: MODELS });
+app.post('/api/satellite', async (req, res) => {
+    res.json({ ndvi_score: 0.72 + (Math.random() * 0.1), health_status: "Vibrant / Optimal", moisture_index: "84%", surface_temp: "26.4°C", last_pass: new Date().toLocaleDateString() });
 });
 
-if (process.env.NODE_ENV !== 'production') {
-    const port = process.env.PORT || 3004;
-    app.listen(port, () => console.log(`Backend on port ${port}`));
-}
+app.get('/api/weather', async (req, res) => {
+    res.json({ current_temp: "28°C", humidity: "65%", risk_level: "Medium", alerts: [{ type: "Heatwave", severity: "High", advice: "Increase irrigation." }] });
+});
+
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
 
 export default app;

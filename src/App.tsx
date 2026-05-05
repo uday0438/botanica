@@ -267,7 +267,7 @@ const TRANSLATIONS: Record<string, any> = {
 };
 
 // Backend API Configuration
-const API_BASE_URL = 'http://localhost:3004';
+const API_BASE_URL = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3004';
 
 // --- Type Definitions ---
 interface CropAnalysis {
