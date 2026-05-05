@@ -10,12 +10,8 @@ dotenv.config();
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
-
-// Import data directly to ensure it's bundled in Vercel serverless environment
-import knowledgeBase from './knowledge_base.json' assert { type: 'json' };
-import datasetReference from './dataset_reference.json' assert { type: 'json' };
-import soilReference from './soil_fertilizer_reference.json' assert { type: 'json' };
-import marketReference from './market_reference.json' assert { type: 'json' };
+// Import data directly from the TypeScript module (Zero-File Dependency)
+import { knowledgeBase, datasetReference, soilReference, marketReference } from './data.js';
 
 const apiKey = process.env.GEMINI_API_KEY;
 const weatherApiKey = process.env.OPENWEATHER_API_KEY;
