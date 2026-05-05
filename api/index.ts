@@ -13,7 +13,7 @@ app.use(express.json({ limit: '50mb' }));
 
 // Utility to read project files in Vercel environment
 const readData = (filename: string) => {
-    const filePath = path.join(process.cwd(), filename);
+    const filePath = path.resolve(__dirname, filename);
     return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
 };
 
@@ -126,7 +126,14 @@ app.post('/api/market', async (req, res) => {
 });
 
 app.post('/api/satellite', async (req, res) => {
-    res.json({ ndvi_score: 0.72 + (Math.random() * 0.1), health_status: "Vibrant / Optimal", moisture_index: "84%", surface_temp: "26.4°C", last_pass: new Date().toLocaleDateString() });
+    res.json({ 
+        ndvi_score: 0.72 + (Math.random() * 0.1), 
+        health_status: "Vibrant / Optimal", 
+        moisture_index: "84%", 
+        surface_temp: "26.4°C", 
+        last_pass: new Date().toLocaleDateString(),
+        map_url: "/ndvi_map.png"
+    });
 });
 
 app.get('/api/weather', async (req, res) => {

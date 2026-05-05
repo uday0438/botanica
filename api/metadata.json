@@ -1,0 +1,8 @@
+{
+  "name": "Smart Crop Doctor",
+  "description": "A web dashboard to analyze crop images for diseases, providing solutions and next crop recommendations.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": []
+}

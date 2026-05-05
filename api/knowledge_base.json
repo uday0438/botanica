@@ -1,0 +1,50 @@
+{
+  "fertilizer_logic": [
+    {
+      "soil_type": "Sandy",
+      "crop_type": "Maize",
+      "issue": "Nitrogen Deficiency",
+      "recommendation": "Urea (46% N)",
+      "dosage": "120 kg/hectare",
+      "scientific_reason": "Sandy soil leaches nitrogen quickly; Urea provides a concentrated source."
+    },
+    {
+      "soil_type": "Loamy",
+      "crop_type": "Tomato",
+      "issue": "Phosphorus Deficiency",
+      "recommendation": "DAP (Diammonium Phosphate)",
+      "dosage": "50 kg/acre",
+      "scientific_reason": "Loamy soil holds P well; DAP provides immediate P for root development."
+    },
+    {
+      "soil_type": "Black",
+      "crop_type": "Cotton",
+      "issue": "Potassium Deficiency",
+      "recommendation": "MOP (Muriate of Potash)",
+      "dosage": "40 kg/acre",
+      "scientific_reason": "Black soil is rich in clay but can lack available K during peak growth."
+    },
+    {
+      "soil_type": "Clayey",
+      "crop_type": "Rice",
+      "issue": "Zinc Deficiency",
+      "recommendation": "Zinc Sulphate",
+      "dosage": "10 kg/acre",
+      "scientific_reason": "Clayey soils often bind micronutrients, making Zinc less available."
+    }
+  ],
+  "market_trends": [
+    {
+      "crop": "Groundnut",
+      "region": "South India",
+      "avg_price_inr": 6500,
+      "trend": "Rising"
+    },
+    {
+      "crop": "Soybean",
+      "region": "Central India",
+      "avg_price_inr": 4800,
+      "trend": "Stable"
+    }
+  ]
+}

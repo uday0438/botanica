@@ -1,0 +1,36 @@
+{
+  "plant_village": {
+    "description": "Standard agricultural dataset for crop disease identification",
+    "source": "Kaggle / PlantVillage",
+    "classes": [
+      "Apple: Scab, Black rot, Cedar apple rust, Healthy",
+      "Blueberry: Healthy",
+      "Cherry: Powdery mildew, Healthy",
+      "Corn (Maize): Gray leaf spot, Common rust, Northern Leaf Blight, Healthy",
+      "Grape: Black rot, Esca (Black Measles), Leaf blight, Healthy",
+      "Orange: Haunglongbing (Citrus greening)",
+      "Peach: Bacterial spot, Healthy",
+      "Pepper (Bell): Bacterial spot, Healthy",
+      "Potato: Early blight, Late blight, Healthy",
+      "Raspberry: Healthy",
+      "Soybean: Healthy",
+      "Squash: Powdery mildew",
+      "Strawberry: Leaf scorch, Healthy",
+      "Tomato: Bacterial spot, Early blight, Late blight, Leaf Mold, Septoria leaf spot, Spider mites, Target Spot, Yellow Leaf Curl Virus, Mosaic virus, Healthy"
+    ]
+  },
+  "fruits_360": {
+    "description": "Comprehensive dataset for fruit and vegetable type classification",
+    "source": "Kaggle / Fruits 360",
+    "classes": [
+      "Apple (Crimson Snow, Golden, Pink Lady, Red Delicious)",
+      "Banana (Yellow, Red, Lady Finger)",
+      "Berries (Blackberry, Blueberry, Mulberry, Raspberry, Strawberry)",
+      "Citrus (Clementine, Grapefruit, Lemon, Lime, Mandarine, Orange)",
+      "Tropical (Avocado, Cactus fruit, Coconut, Dates, Fig, Guava, Kiwi, Lychee, Mango, Papaya, Pineapple, Pomegranate)",
+      "Stone Fruits (Apricot, Cherry, Nectarine, Peach, Plum)",
+      "Vegetables (Beetroot, Cabbage, Carrot, Cauliflower, Corn, Cucumber, Eggplant, Onion, Potato, Tomato, Zucchini)",
+      "Peppers (Bell Pepper, Chilli Red, Chilli Green, Jalapeno)"
+    ]
+  }
+}

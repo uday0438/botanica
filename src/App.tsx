@@ -1461,7 +1461,7 @@ export default function App() {
                       
                       <div className="relative aspect-video rounded-[2rem] overflow-hidden shadow-2xl border-4 border-white">
                          <img 
-                            src="C:/Users/UDAYV/.gemini/antigravity/brain/aa994307-ddb3-431f-9c28-22304cdf6db2/ndvi_satellite_map_1777977031047.png" 
+                            src="/ndvi_map.png" 
                             alt="NDVI Map" 
                             className="w-full h-full object-cover"
                          />
