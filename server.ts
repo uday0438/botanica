@@ -44,7 +44,7 @@ if (!mandiApiKey) {
 }
 const genAI = new GoogleGenerativeAI(apiKey || "");
 
-const MODELS = ["gemini-flash-latest", "gemini-2.0-flash", "gemini-2.5-flash", "gemini-flash-lite-latest"];
+const MODELS = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-flash-latest"];
 
 function getModel(modelName: string, jsonMode = false) {
     const config: any = {};
@@ -64,14 +64,14 @@ async function generateWithFallback(
                 return await buildRequest(modelName);
             } catch (error: any) {
                 lastError = error;
-                if (error?.status === 429) {
+                if (error?.status === 429 || error?.status === 503 || error?.status === 504) {
                     if (attempt < maxRetriesPerModel) {
                         const wait = (attempt + 1) * 2000 + Math.random() * 1000;
-                        console.log(`⏳ Rate limited on ${modelName}, waiting ${(wait/1000).toFixed(1)}s...`);
+                        console.log(`⏳ Error ${error?.status} on ${modelName}, retrying in ${(wait/1000).toFixed(1)}s...`);
                         await new Promise(r => setTimeout(r, wait));
                         continue;
                     }
-                    console.log(`⚠️ ${modelName} quota exhausted, trying next model...`);
+                    console.log(`⚠️ ${modelName} failed with ${error?.status}, trying next model...`);
                     break;
                 }
                 throw error;
@@ -138,7 +138,7 @@ Compare the NEW images with the previous state. In the "diseaseResult" field, in
 Modify the "solution" to account for whether the current treatment is working.`;
         }
 
-        prompt += `\n\nRespond in ${language}. Ensure the "plantName" field is ALWAYS populated with the common name of the plant identified.`;
+        prompt += `\n\nCRITICAL: You MUST respond in the ${language} language. All descriptive text in the JSON fields (solution, preventiveMeasures, etc.) MUST be in ${language}. Ensure the "plantName" field is the common name in ${language}.`;
 
         const imageParts = images.map((img: any) => ({
             inlineData: { data: img.data, mimeType: img.mimeType || 'image/jpeg' }
@@ -164,33 +164,39 @@ Modify the "solution" to account for whether the current treatment is working.`;
         console.error('❌ Analysis error:', error.message);
         
         // Comprehensive Fallback to simulated data to prevent frontend errors
-        const fallbackData = {
-            "plantName": "Unknown Specimen",
-            "diseaseResult": "Simulated Analysis (Service Busy)",
-            "solution": "We're currently experiencing high traffic on our AI servers. Based on general patterns, please ensure the plant is well-hydrated, check for common pests like aphids, and isolate the plant if you suspect a spreadable infection.",
-            "preventiveMeasures": [
-                "Maintain optimal soil moisture and drainage",
-                "Ensure adequate sunlight and air circulation",
-                "Regularly inspect leaves for early signs of spots or pests",
-                "Use sterilized tools for pruning"
-            ],
-            "soilFertility": { 
-                "pH": "6.5", 
-                "nitrogen": "Medium", 
-                "phosphorus": "Low-Medium", 
-                "potassium": "Medium", 
-                "soilType": "Loamy Soil" 
-            },
-            "fertilizerCost": { 
-                "urea": "₹450", 
-                "dap": "₹1,200", 
-                "mop": "₹850", 
-                "totalCost": "₹2,500" 
-            },
-            "nextCropRecommendation": "Legumes (Peas/Beans) to restore nitrogen levels."
+        const getLocalizedFallback = (lang: string) => {
+            const fallbacks: any = {
+                "Hindi": {
+                    "plantName": "अज्ञात नमूना",
+                    "diseaseResult": "सिम्युलेटेड विश्लेषण (सेवा व्यस्त)",
+                    "solution": "हमारे AI सर्वर पर वर्तमान में बहुत अधिक ट्रैफ़िक है। सामान्य पैटर्न के आधार पर, कृपया सुनिश्चित करें कि पौधे को पर्याप्त पानी मिले, कीटों की जांच करें और यदि आपको संक्रमण का संदेह हो तो पौधे को अलग करें।",
+                    "preventiveMeasures": ["मिट्टी की नमी बनाए रखें", "सूरज की रोशनी सुनिश्चित करें", "नियमित निरीक्षण करें", "साफ औजारों का उपयोग करें"],
+                    "soilFertility": { "pH": "6.5", "nitrogen": "Medium", "phosphorus": "Low", "potassium": "Medium", "soilType": "दोमट मिट्टी" },
+                    "fertilizerCost": { "urea": "₹450", "dap": "₹1,200", "mop": "₹850", "totalCost": "₹2,500" },
+                    "nextCropRecommendation": "नाइट्रोजन बहाल करने के लिए फलियां (मटर/बीन्स)।"
+                },
+                "Telugu": {
+                    "plantName": "తెలియని నమూనా",
+                    "diseaseResult": "సిమ్యులేటెడ్ విశ్లేషణ (సర్వర్ బిజీ)",
+                    "solution": "మా AI సర్వర్‌లలో ప్రస్తుతం రద్దీ ఎక్కువగా ఉంది. సాధారణ పద్ధతుల ఆధారంగా, మొక్కకు తగినంత నీరు అందేలా చూడండి, కీటకాలను గమనించండి.",
+                    "preventiveMeasures": ["నేల తేమను నిర్వహించండి", "సూర్యరశ్మిని నిర్ధారించండి", "క్రమం తప్పకుండా తనిఖీ చేయండి"],
+                    "soilFertility": { "pH": "6.5", "nitrogen": "Medium", "phosphorus": "Low", "potassium": "Medium", "soilType": "ఒండ్రు నేల" },
+                    "fertilizerCost": { "urea": "₹450", "dap": "₹1,200", "mop": "₹850", "totalCost": "₹2,500" },
+                    "nextCropRecommendation": "నత్రజని పెంచడానికి పప్పుధాన్యాలు."
+                }
+            };
+            return fallbacks[lang] || {
+                "plantName": "Unknown Specimen",
+                "diseaseResult": "Simulated Analysis (Service Busy)",
+                "solution": "AI servers are busy. Check hydration, pests, and air circulation.",
+                "preventiveMeasures": ["Maintain soil moisture", "Ensure sunlight", "Regular inspection"],
+                "soilFertility": { "pH": "6.5", "nitrogen": "Medium", "phosphorus": "Low", "potassium": "Medium", "soilType": "Loamy Soil" },
+                "fertilizerCost": { "urea": "₹450", "dap": "₹1,200", "mop": "₹850", "totalCost": "₹2,500" },
+                "nextCropRecommendation": "Legumes to restore nitrogen."
+            };
         };
         
-        res.json(fallbackData);
+        res.json(getLocalizedFallback(language));
     }
 });
 
@@ -213,7 +219,7 @@ app.post('/api/chat', async (req, res) => {
         Your goal is to answer EVERY question the user asks. 
         While you specialize in farming and plant care, you should also help with gardening, soil health, and general science.
         If a question is completely unrelated to farming, provide a helpful and polite answer anyway while trying to relate it back to the farmer's life if possible.
-        Keep answers helpful and respond in ${language}.`;
+        CRITICAL: You MUST respond in ${language}. All explanations and advice MUST be in ${language}.`;
 
         const result = await generateWithFallback(async (modelName) => {
             const model = getModel(modelName);
@@ -236,7 +242,12 @@ app.post('/api/chat', async (req, res) => {
         res.json({ response: result.response.text() });
     } catch (error: any) {
         console.error('❌ Chat error:', error.message);
-        res.json({ response: "I'm processing your request. As an AI expert, I'm here to help you with your plants and farm. Could you tell me more about what you're working on?" });
+        const chatFallbacks: any = {
+            "Hindi": "मुझे खेद है, मैं अभी आपकी सहायता करने में असमर्थ हूँ। कृपया कुछ क्षणों में पुनः प्रयास करें।",
+            "Telugu": "క్షమించండి, నేను ప్రస్తుతం మీకు సహాయం చేయలేకపోతున్నాను. దయచేసి కొద్ది సేపటి తర్వాత మళ్ళీ ప్రయత్నించండి.",
+            "Marathi": "क्षमस्व, मी सध्या तुम्हाला मदत करू शकत नाही. कृपया थोड्या वेळाने पुन्हा प्रयत्न करा."
+        };
+        res.json({ response: chatFallbacks[language] || "I'm processing your request. As an AI expert, I'm here to help you with your plants and farm. Could you tell me more about what you're working on?" });
     }
 });
 
@@ -265,7 +276,8 @@ Return valid JSON:
     "imageUrl": "https://source.unsplash.com/featured/?plant,crop,[CorrectedName]"
 }
 Note: Replace [CorrectedName] with the actual name of the crop.
-Respond in ${language}.`;
+Respond in ${language}. 
+CRITICAL: You MUST respond in ${language}. All JSON string values (cropName, scientificName, description, growthCycle, idealSoil, optimalHarvest) MUST be in ${language}.`;
 
         const result = await generateWithFallback(async (modelName) => {
             const model = getModel(modelName, true);
@@ -280,7 +292,21 @@ Respond in ${language}.`;
         }
     } catch (error: any) {
         console.error('❌ Encyclopedia error:', error.message);
-        res.json({
+        const encFallbacks: any = {
+            "Hindi": {
+                "cropName": query + " (सिम्युलेटेड डेटा)",
+                "scientificName": "सेवा व्यस्त",
+                "description": "विश्वकोश एआई वर्तमान में अधिक ट्रैफ़िक का सामना कर रहा है। कृपया कुछ मिनटों में पुनः प्रयास करें।",
+                "growthCycle": "एन/ए", "commonDiseases": ["एन/ए"], "idealSoil": "एन/ए", "optimalHarvest": "एन/ए"
+            },
+            "Telugu": {
+                "cropName": query + " (సిమ్యులేటెడ్ డేటా)",
+                "scientificName": "సర్వర్ బిజీ",
+                "description": "ఎన్సైక్లోపీడియా AI ప్రస్తుతం రద్దీగా ఉంది. దయచేసి కొన్ని నిమిషాల తర్వాత మళ్ళీ ప్రయత్నించండి.",
+                "growthCycle": "N/A", "commonDiseases": ["N/A"], "idealSoil": "N/A", "optimalHarvest": "N/A"
+            }
+        };
+        res.json(encFallbacks[language] || {
             "cropName": query + " (Simulated Data)",
             "scientificName": "Service Overloaded",
             "description": "The encyclopedia AI is currently experiencing high traffic. Please try your search again in a few minutes.",
@@ -428,7 +454,7 @@ app.post('/api/satellite', async (req, res) => {
             nitrogen_level: "High",
             last_pass: new Date().toLocaleDateString(),
             anomalies: ["Stable growth across all sectors. Minor chlorophyll variance in North Sector."],
-            map_url: "C:/Users/UDAYV/.gemini/antigravity/brain/aa994307-ddb3-431f-9c28-22304cdf6db2/ndvi_satellite_map_1777977031047.png" 
+            map_url: "/ndvi_map.png" 
         });
     } catch (error) {
         res.status(500).json({ error: "Satellite data unavailable" });

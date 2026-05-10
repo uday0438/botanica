@@ -18,7 +18,7 @@ const weatherApiKey = process.env.OPENWEATHER_API_KEY;
 const mandiApiKey = process.env.AGMARKNET_API_KEY;
 
 const genAI = new GoogleGenerativeAI(apiKey || "");
-const MODELS = ["gemini-flash-latest", "gemini-2.0-flash", "gemini-2.5-flash", "gemini-flash-lite-latest"];
+const MODELS = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-flash-latest"];
 
 function getModel(modelName: string, jsonMode = false) {
     const config: any = {};
@@ -33,7 +33,8 @@ async function generateWithFallback(buildRequest: (modelName: string) => Promise
             return await buildRequest(modelName);
         } catch (error: any) {
             lastError = error;
-            if (error?.status === 429) continue;
+            // Catch Rate Limit (429) and Service Unavailable (503/504)
+            if (error?.status === 429 || error?.status === 503 || error?.status === 504) continue;
             throw error;
         }
     }
@@ -58,7 +59,8 @@ app.post('/api/analyze', async (req, res) => {
         let prompt = `Analyze these images using grounding data:
         [PLANTS] ${JSON.stringify(datasetReference)}
         [SOIL/FERT] ${JSON.stringify(soilReference)}
-        Return JSON with plantName, diseaseResult, solution, preventiveMeasures, soilFertility, fertilizerCost, nextCropRecommendation. Respond in ${language}.`;
+        Return JSON with plantName, diseaseResult, solution, preventiveMeasures, soilFertility, fertilizerCost, nextCropRecommendation. 
+        CRITICAL: All descriptive text values MUST be in ${language}. Ensure the "plantName" is the common name in ${language}.`;
 
         const imageParts = images.map((img: any) => ({
             inlineData: { data: img.data, mimeType: img.mimeType || 'image/jpeg' }
@@ -89,7 +91,11 @@ app.post('/api/chat', async (req, res) => {
         });
         res.json({ response: result.response.text() });
     } catch (error: any) {
-        res.json({ response: "AI is currently busy. Please try again in a moment." });
+        const chatFallbacks: any = {
+            "Hindi": "AI अभी व्यस्त है। कृपया कुछ देर बाद पुनः प्रयास करें।",
+            "Telugu": "AI ప్రస్తుతం రద్దీగా ఉంది. దయచేసి కాసేపటి తర్వాత మళ్ళీ ప్రయత్నించండి."
+        };
+        res.json({ response: chatFallbacks[language] || "AI is currently busy. Please try again in a moment." });
     }
 });
 
@@ -103,7 +109,11 @@ app.post('/api/encyclopedia', async (req, res) => {
         });
         res.json(safeParseJSON(result.response.text()));
     } catch (error) {
-        res.status(500).json({ error: "Failed to fetch data" });
+        const encFallbacks: any = {
+            "Hindi": { "cropName": "सेवा व्यस्त", "description": "कृपया बाद में प्रयास करें।" },
+            "Telugu": { "cropName": "సర్వర్ బిజీ", "description": "దయచేసి తర్వాత ప్రయత్నించండి." }
+        };
+        res.status(500).json(encFallbacks[language] || { error: "Failed to fetch data" });
     }
 });
 

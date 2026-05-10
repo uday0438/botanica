@@ -6,7 +6,8 @@ import {
   Lightbulb, Search, Image as ImageIcon,
   Sprout, IndianRupee, History, Star,
   MessageSquare, ChevronLeft, Send, CheckCircle2, X,
-  Share2, MapPin, BookOpen, GitCompare, TrendingUp, Activity, Camera, Mic, Globe, AlertCircle
+  Share2, MapPin, BookOpen, GitCompare, TrendingUp, Activity, Camera, Mic, Globe, AlertCircle,
+  Sun, Moon
 } from 'lucide-react';
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { Toaster, toast } from 'sonner';
@@ -372,6 +373,25 @@ export default function App() {
   const [marketPrice, setMarketPrice] = useState<{price: string, market: string, isSimulated: boolean} | null>(null);
   const [trackingFrom, setTrackingFrom] = useState<HistoryItem | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('botanica_theme');
+      if (stored === 'dark' || stored === 'light') return stored;
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return 'light';
+  });
+
+  // Apply Theme
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('botanica_theme', theme);
+  }, [theme]);
 
   // App Initial Load Simulation
   useEffect(() => {
@@ -771,16 +791,16 @@ export default function App() {
     <div className="min-h-screen p-4 sm:p-8 selection:bg-leaf/20 relative">
       {/* Nature Background Layer */}
       <div 
-        className="fixed inset-0 z-[-1] bg-cover bg-center bg-no-repeat transition-opacity duration-1000"
+        className="fixed inset-0 z-[-1] bg-cover bg-center bg-no-repeat transition-all duration-700"
         style={{ 
           backgroundImage: "url('/nature_bg.png')",
-          backgroundColor: "#F8F9F5"
+          backgroundColor: theme === 'dark' ? "#121212" : "#F8F9F5"
         }}
       >
-        <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px]"></div>
+        <div className={`absolute inset-0 backdrop-blur-[2px] transition-all duration-700 ${theme === 'dark' ? 'bg-black/70' : 'bg-white/60'}`}></div>
       </div>
       
-      <Toaster position="top-center" />
+      <Toaster position="top-center" theme={theme} />
       
       {/* Header & Navigation */}
       <header className="flex flex-col items-center justify-center mb-6 sm:mb-8 gap-2 relative max-w-[1600px] mx-auto">
@@ -793,7 +813,7 @@ export default function App() {
           <select 
             value={selectedLanguage} 
             onChange={(e) => setSelectedLanguage(e.target.value)}
-            className="bg-white border border-stone-200 text-xs font-bold rounded-full px-3 sm:px-4 py-2 outline-none shadow-sm hover:border-leaf transition-all cursor-pointer appearance-none pr-8 sm:pr-10 relative bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%233A5A40%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C/polyline%3E%3C/svg%3E')] bg-[length:14px_14px] bg-[right_10px_center] bg-no-repeat ring-leaf/20 focus:ring-4"
+            className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-xs font-bold text-stone-800 dark:text-stone-100 rounded-full px-3 sm:px-4 py-2 outline-none shadow-sm hover:border-leaf transition-all cursor-pointer appearance-none pr-8 sm:pr-10 relative bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%233A5A40%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C/polyline%3E%3C/svg%3E')] bg-[length:14px_14px] bg-[right_10px_center] bg-no-repeat ring-leaf/20 focus:ring-4"
           >
             <option value="English">English</option>
             <option value="Hindi">हिन्दी (Hindi)</option>
@@ -801,22 +821,31 @@ export default function App() {
             <option value="Marathi">मराठी (Marathi)</option>
             <option value="Punjabi">ਪੰਜਾਬੀ (Punjabi)</option>
           </select>
+
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+            className="rounded-full w-10 h-10 bg-white dark:bg-stone-900 border-stone-200 dark:border-stone-700 shadow-sm text-leaf dark:text-stone-100 hover:bg-stone-50 dark:hover:bg-stone-800 transition-all flex items-center justify-center"
+          >
+            {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+          </Button>
         </div>
 
-        <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2 mt-3 sm:mt-4 bg-white/60 p-1 sm:p-1.5 rounded-2xl sm:rounded-full border border-stone-200 shadow-sm backdrop-blur w-full sm:w-auto">
-           <button onClick={() => setViewMode('analyze')} className={`px-3 sm:px-5 py-1.5 sm:py-2 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-widest transition-all ${viewMode === 'analyze' ? 'bg-leaf text-white shadow-md' : 'text-stone-500 hover:bg-white'}`}>
+        <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2 mt-3 sm:mt-4 bg-white/60 dark:bg-stone-900/60 p-1 sm:p-1.5 rounded-2xl sm:rounded-full border border-stone-200 dark:border-stone-800 shadow-sm backdrop-blur w-full sm:w-auto">
+           <button onClick={() => setViewMode('analyze')} className={`px-3 sm:px-5 py-1.5 sm:py-2 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-widest transition-all ${viewMode === 'analyze' ? 'bg-leaf text-white shadow-md' : 'text-stone-500 dark:text-stone-400 hover:bg-white dark:hover:bg-stone-800'}`}>
              <Search className="w-3 h-3 sm:w-3.5 sm:h-3.5 inline mr-0.5 sm:mr-1" /> {t.analyze}
            </button>
-           <button onClick={() => setViewMode('encyclopedia')} className={`px-3 sm:px-5 py-1.5 sm:py-2 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-widest transition-all ${viewMode === 'encyclopedia' ? 'bg-leaf text-white shadow-md' : 'text-stone-500 hover:bg-white'}`}>
+           <button onClick={() => setViewMode('encyclopedia')} className={`px-3 sm:px-5 py-1.5 sm:py-2 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-widest transition-all ${viewMode === 'encyclopedia' ? 'bg-leaf text-white shadow-md' : 'text-stone-500 dark:text-stone-400 hover:bg-white dark:hover:bg-stone-800'}`}>
              <BookOpen className="w-3 h-3 sm:w-3.5 sm:h-3.5 inline mr-0.5 sm:mr-1" /> {t.encyclopedia}
            </button>
-           <button onClick={() => setViewMode('history')} className={`px-3 sm:px-5 py-1.5 sm:py-2 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-widest transition-all ${viewMode === 'history' ? 'bg-leaf text-white shadow-md' : 'text-stone-500 hover:bg-white'}`}>
+           <button onClick={() => setViewMode('history')} className={`px-3 sm:px-5 py-1.5 sm:py-2 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-widest transition-all ${viewMode === 'history' ? 'bg-leaf text-white shadow-md' : 'text-stone-500 dark:text-stone-400 hover:bg-white dark:hover:bg-stone-800'}`}>
              <History className="w-3 h-3 sm:w-3.5 sm:h-3.5 inline mr-0.5 sm:mr-1" /> {t.history}
            </button>
-           <button onClick={() => setViewMode('chat')} className={`px-3 sm:px-5 py-1.5 sm:py-2 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-widest transition-all ${viewMode === 'chat' ? 'bg-leaf text-white shadow-md' : 'text-stone-500 hover:bg-white'}`}>
+           <button onClick={() => setViewMode('chat')} className={`px-3 sm:px-5 py-1.5 sm:py-2 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-widest transition-all ${viewMode === 'chat' ? 'bg-leaf text-white shadow-md' : 'text-stone-500 dark:text-stone-400 hover:bg-white dark:hover:bg-stone-800'}`}>
              <MessageSquare className="w-3 h-3 sm:w-3.5 sm:h-3.5 inline mr-0.5 sm:mr-1" /> {t.doctor_ai}
            </button>
-           <button onClick={() => setViewMode('field')} className={`px-3 sm:px-5 py-1.5 sm:py-2 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-widest transition-all ${viewMode === 'field' ? 'bg-amber-600 text-white shadow-md' : 'text-stone-500 hover:bg-white'}`}>
+           <button onClick={() => setViewMode('field')} className={`px-3 sm:px-5 py-1.5 sm:py-2 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-widest transition-all ${viewMode === 'field' ? 'bg-amber-600 text-white shadow-md' : 'text-stone-500 dark:text-stone-400 hover:bg-white dark:hover:bg-stone-800'}`}>
              <Globe className="w-3 h-3 sm:w-3.5 sm:h-3.5 inline mr-0.5 sm:mr-1" /> Field Hub
            </button>
         </div>
@@ -837,7 +866,7 @@ export default function App() {
                        <input 
                           value={encSearch} onChange={e => setEncSearch(e.target.value)}
                           placeholder={t.search_placeholder} 
-                          className="w-full pl-12 pr-4 py-4 rounded-2xl border border-stone-200 shadow-inner outline-none focus:border-leaf font-sans text-lg bg-white bg-opacity-90 transition-colors"
+                          className="w-full pl-12 pr-4 py-4 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-inner outline-none focus:border-leaf font-sans text-lg bg-white dark:bg-stone-900 bg-opacity-90 dark:bg-opacity-90 dark:text-white transition-colors"
                        />
                     </div>
                     <Button type="submit" disabled={isEncSearching} className="h-auto px-8 rounded-2xl bg-leaf hover:bg-leaf/90 shadow-lg text-lg">
@@ -897,7 +926,7 @@ export default function App() {
         {/* HISTORY VIEW */}
         {viewMode === 'history' && (
           <motion.div key="history-view" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="max-w-[1600px] mx-auto flex flex-col gap-6">
-            <h2 className="serif text-3xl font-semibold text-leaf mb-4 border-b border-soft pb-4">{t.history}</h2>
+            <h2 className="serif text-3xl font-semibold text-leaf mb-4 border-b border-soft dark:border-stone-800 pb-4">{t.history}</h2>
             {history.length === 0 ? (
               <p className="text-stone-500 text-center py-20 italic">No past diagnoses found.</p>
             ) : (
@@ -914,10 +943,10 @@ export default function App() {
                         setActiveTab('Diagnosis');
                         setViewMode('analyze');
                     }}
-                    className="glass-card p-4 rounded-2xl cursor-pointer hover:border-leaf/30 transition-colors shadow-sm relative group bg-white/50 hover:bg-white"
+                    className="glass-card p-4 rounded-2xl cursor-pointer hover:border-leaf/30 transition-colors shadow-sm relative group bg-white/50 dark:bg-stone-900/50 hover:bg-white dark:hover:bg-stone-900"
                   >
-                    <img src={item.image} alt={item.analysis.diseaseResult} className="w-full h-40 object-cover rounded-xl mb-4 border border-stone-200" />
-                    <h3 className="serif text-xl font-medium line-clamp-1 text-stone-800">{item.analysis.diseaseResult}</h3>
+                    <img src={item.image} alt={item.analysis.diseaseResult} className="w-full h-40 object-cover rounded-xl mb-4 border border-stone-200 dark:border-stone-700" />
+                    <h3 className="serif text-xl font-medium line-clamp-1 text-stone-800 dark:text-stone-100">{item.analysis.diseaseResult}</h3>
                     <p className="text-xs text-stone-400 mt-1">{new Date(item.timestamp).toLocaleString()}</p>
                     <div className="flex gap-2 mt-3">
                         <button 
@@ -951,9 +980,9 @@ export default function App() {
               <div className="col-span-1 lg:col-span-4 flex flex-col gap-6">
                 
                 {/* Geolocation Alerts Panel */}
-                <div className="glass-card p-5 rounded-[2rem] shadow-sm border border-stone-200 bg-white/70">
+                <div className="glass-card p-5 rounded-[2rem] shadow-sm border border-stone-200 dark:border-stone-800 bg-white/70 dark:bg-stone-900/70">
                    <div className="flex justify-between items-center mb-3">
-                     <h3 className="text-xs font-bold uppercase tracking-widest text-stone-600 flex items-center gap-1.5"><MapPin className="w-4 h-4 text-leaf"/> {t.local_trends}</h3>
+                     <h3 className="text-xs font-bold uppercase tracking-widest text-stone-600 dark:text-stone-400 flex items-center gap-1.5"><MapPin className="w-4 h-4 text-leaf"/> {t.local_trends}</h3>
                      {!localAlerts && (
                         <button onClick={requestLocationAndAlerts} disabled={isFetchingAlerts} className="text-[10px] bg-leaf/10 text-leaf hover:bg-leaf hover:text-white transition-colors px-3 py-1 rounded-full font-bold">
                            {isFetchingAlerts ? t.fetching : t.btn_detect}
@@ -973,11 +1002,11 @@ export default function App() {
                 </div>
 
                 {/* Upload panel */}
-                <div className="glass-card p-6 rounded-[2rem] shadow-sm relative overflow-hidden border border-stone-200">
+                <div className="glass-card p-6 rounded-[2rem] shadow-sm relative overflow-hidden border border-stone-200 dark:border-stone-800">
                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/leaf.png')] opacity-5 pointer-events-none"></div>
                    
                    <div className="flex items-center justify-between mb-6 relative z-10">
-                     <h3 className="serif text-2xl font-semibold text-stone-800">{t.upload_title}</h3>
+                     <h3 className="serif text-2xl font-semibold text-stone-800 dark:text-stone-100">{t.upload_title}</h3>
                      <div className="flex gap-2">
                         {trackingFrom && (
                             <Badge className="bg-amber-100 text-amber-800 border-none animate-pulse">
@@ -1002,10 +1031,10 @@ export default function App() {
                             `}
                           >
                             <input {...getInputProps()} />
-                            <motion.div whileHover={{ scale: 1.1 }} className="w-12 h-12 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 text-leaf">
+                            <motion.div whileHover={{ scale: 1.1 }} className="w-12 h-12 bg-white dark:bg-stone-800 rounded-full shadow-sm flex items-center justify-center mb-4 text-leaf">
                                 <ImageIcon className="w-6 h-6" />
                             </motion.div>
-                            <p className="serif text-lg font-medium text-stone-700 mb-1">{t.upload_title}</p>
+                            <p className="serif text-lg font-medium text-stone-700 dark:text-stone-300 mb-1">{t.upload_title}</p>
                             <p className="text-[11px] text-stone-400 leading-relaxed px-2">{t.upload_desc}</p>
                           </div>
                           
@@ -1017,7 +1046,7 @@ export default function App() {
 
                           <button 
                             onClick={startCamera}
-                            className="w-full py-4 bg-white border border-stone-200 text-stone-700 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-stone-50 transition-all shadow-sm"
+                            className="w-full py-4 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-300 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-stone-50 dark:hover:bg-stone-800 transition-all shadow-sm"
                           >
                              <Camera className="w-5 h-5 text-leaf" /> Capture Live Photo
                           </button>
@@ -1070,8 +1099,8 @@ export default function App() {
                  {!isAnalyzing && !analysisResult && (
                     <div className="glass-card flex-1 rounded-[2rem] shadow-sm flex flex-col items-center justify-center p-12 text-center border border-dashed border-stone-300">
                       <Sprout className="w-16 h-16 text-stone-300 mb-4" />
-                      <h3 className="serif text-2xl font-medium text-stone-500 mb-2">{t.awaiting_specimen}</h3>
-                      <p className="text-sm text-stone-400 max-w-sm">{t.awaiting_desc}</p>
+                      <h3 className="serif text-2xl font-medium text-stone-500 dark:text-stone-400 mb-2">{t.awaiting_specimen}</h3>
+                      <p className="text-sm text-stone-400 dark:text-stone-500 max-w-sm">{t.awaiting_desc}</p>
                     </div>
                  )}
 
@@ -1086,7 +1115,7 @@ export default function App() {
                       </motion.div>
                       
                       <h3 className="serif text-2xl font-medium text-leaf mb-2 relative z-10">{t.analyzing}</h3>
-                      <p className="text-sm text-stone-500 mb-8 max-w-sm relative z-10">{t.analyzing_desc}</p>
+                      <p className="text-sm text-stone-500 dark:text-stone-400 mb-8 max-w-sm relative z-10">{t.analyzing_desc}</p>
                       
                       <div className="w-full max-w-md bg-stone-200 rounded-full h-3 overflow-hidden shadow-inner relative z-10">
                         <motion.div className="bg-leaf h-full rounded-full" initial={{ width: "0%" }} animate={{ width: `${progress}%` }} transition={{ ease: "easeInOut", duration: 0.5 }}/>
@@ -1171,7 +1200,7 @@ export default function App() {
                              <button onClick={() => window.print()} className="flex items-center gap-1.5 px-3 py-2 bg-leaf/10 hover:bg-leaf hover:text-white border border-leaf/20 text-xs font-bold text-leaf rounded-full shadow-sm transition-all uppercase tracking-wider">
                                 <CloudRain className="w-3.5 h-3.5" /> {t.download_report}
                              </button>
-                             <button onClick={handleShare} className="p-2 bg-stone-100/80 border border-stone-200 hover:bg-leaf hover:border-leaf hover:text-white text-stone-500 rounded-full shadow-sm transition-all" title="Share Results">
+                             <button onClick={handleShare} className="p-2 bg-stone-100/80 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 hover:bg-leaf hover:border-leaf hover:text-white text-stone-500 rounded-full shadow-sm transition-all" title="Share Results">
                                <Share2 className="w-4 h-4" />
                              </button>
                            </div>
@@ -1616,12 +1645,12 @@ export default function App() {
 // --- Helper Components ---
 function WeatherWidget({ icon, label, value }: { icon: React.ReactNode, label: string, value: string }) {
   return (
-    <motion.div whileHover={{ y: -2 }} className="glass-card flex flex-col items-center justify-center p-4 rounded-2xl shadow-sm border border-stone-200/50 bg-white/50 backdrop-blur-md">
+    <motion.div whileHover={{ y: -2 }} className="glass-card flex flex-col items-center justify-center p-4 rounded-2xl shadow-sm border border-stone-200/50 dark:border-stone-800 bg-white/50 dark:bg-stone-900/50 backdrop-blur-md">
       <div className="flex items-center justify-center gap-2 mb-2">
-        <div className="text-leaf/60">{icon}</div>
-        <span className="text-[10px] uppercase font-bold text-stone-500 tracking-wider">{label}</span>
+        <div className="text-leaf/60 dark:text-leaf/80">{icon}</div>
+        <span className="text-[10px] uppercase font-bold text-stone-500 dark:text-stone-400 tracking-wider">{label}</span>
       </div>
-      <span className="serif text-2xl font-medium text-stone-800">{value}</span>
+      <span className="serif text-2xl font-medium text-stone-800 dark:text-stone-100">{value}</span>
     </motion.div>
   );
 }

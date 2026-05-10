@@ -131,6 +131,11 @@
         backdrop-filter: blur(8px);
         border: 1px solid rgba(255, 255, 255, 0.8);
     }
+    
+    .dark .glass-card {
+        background: rgba(30, 30, 30, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
 }
 
 @layer base {
@@ -138,7 +143,7 @@
     @apply border-border outline-ring/50;
     }
   body {
-    @apply text-[#2D3A30] font-sans;
+    @apply bg-background text-foreground font-sans;
     -webkit-tap-highlight-color: transparent;
     }
   html {
