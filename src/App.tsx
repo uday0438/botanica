@@ -281,7 +281,7 @@ const TRANSLATIONS: Record<string, any> = {
 };
 
 // Backend API Configuration
-const API_BASE_URL = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3004';
+const API_BASE_URL = ''; // Using root-relative paths for production stability
 
 // --- Type Definitions ---
 interface CropAnalysis {
@@ -578,7 +578,7 @@ export default function App() {
             return { data: base64, mimeType: 'image/jpeg' };
         }));
 
-        const response = await fetch(`${API_BASE_URL}/api/analyze`, {
+        const response = await fetch("/api/analyze`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -649,7 +649,7 @@ export default function App() {
     setEncResult(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/encyclopedia`, {
+      const response = await fetch("/api/encyclopedia`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -684,7 +684,7 @@ export default function App() {
           parts: [{ text: m.content }]
         }));
 
-      const response = await fetch(`${API_BASE_URL}/api/chat`, {
+      const response = await fetch("/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -705,7 +705,7 @@ export default function App() {
 
   const fetchAlertsForCoords = async (latitude: number, longitude: number) => {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/alerts`, {
+        const response = await fetch("/api/alerts`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ latitude, longitude, language: selectedLanguage })
@@ -725,7 +725,7 @@ export default function App() {
     try {
         // Clean up crop name (remove reason text if present)
         const cleanName = cropName.split('(')[0].trim();
-        const response = await fetch(`${API_BASE_URL}/api/market`, {
+        const response = await fetch("/api/market`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ commodity: cleanName })
