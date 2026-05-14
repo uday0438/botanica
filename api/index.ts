@@ -87,7 +87,7 @@ app.post('/api/analyze', async (req, res) => {
           "diseaseResult": "disease",
           "solution": "steps",
           "preventiveMeasures": ["m1", "m2"],
-          "soilFertility": "status",
+          "soilFertility": { "status": "Optimizing", "pH": "6.5", "nitrogen": "Low", "phosphorus": "Medium", "potassium": "High", "soilType": "Loamy" },
           "fertilizerDetails": {
              "chemical": {
                 "urea": { "quantity": "10kg", "cost": "₹100", "effect": "boost" },
