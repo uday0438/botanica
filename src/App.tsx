@@ -766,7 +766,7 @@ export default function App() {
         if (target === 'encyclopedia') {
           setEncSearch(text);
           // Wait a bit for state to update then search
-          setTimeout(() => handleEncSearch(), 100);
+          setTimeout(() => handleEncyclopediaSearch({ preventDefault: () => {} } as React.FormEvent), 100);
         } else {
           setChatInput(text);
         }
