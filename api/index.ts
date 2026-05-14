@@ -13,9 +13,9 @@ const apiKey = (process.env.GEMINI_API_KEY || "").trim();
 const weatherApiKey = (process.env.OPENWEATHER_API_KEY || "").trim();
 
 // ==================== DIRECT API UTILITY ====================
-async function callGeminiDirect(payload: any, model = "gemini-1.5-flash") {
-    // Using the STABLE v1 endpoint for maximum compatibility
-    const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`;
+async function callGeminiDirect(payload: any, model: string) {
+    // Use v1beta for newest models if v1 fails, but v1 is preferred for stability
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
     
     const response = await fetch(url, {
         method: 'POST',
@@ -26,11 +26,35 @@ async function callGeminiDirect(payload: any, model = "gemini-1.5-flash") {
     const data: any = await response.json();
     
     if (!response.ok) {
-        console.error("Direct API Error:", data);
-        throw new Error(data.error?.message || `API Error ${response.status}`);
+        throw { status: response.status, message: data.error?.message || `API Error ${response.status}` };
     }
 
     return data;
+}
+
+// Validated models specifically for your API key
+const VALID_MODELS = [
+    "gemini-flash-latest",
+    "gemini-2.0-flash",
+    "gemini-2.5-flash",
+    "gemini-pro-latest"
+];
+
+async function generateWithFallback(payload: any) {
+    let lastError: any;
+    for (const model of VALID_MODELS) {
+        try {
+            console.log(`🤖 Trying validated model: ${model}`);
+            return await callGeminiDirect(payload, model);
+        } catch (error: any) {
+            console.error(`❌ ${model} failed:`, error.message);
+            lastError = error;
+            // If it's a 404 or 403, try next. If it's 400 (bad prompt), stop.
+            if (error.status === 404 || error.status === 403 || error.status === 429) continue;
+            throw error;
+        }
+    }
+    throw lastError || new Error("All authorized models failed.");
 }
 
 function safeParseJSON(text: string) {
@@ -88,8 +112,7 @@ app.post('/api/analyze', async (req, res) => {
             ]
         }];
 
-        // Try stable v1 first
-        const result = await callGeminiDirect({ contents });
+        const result = await generateWithFallback({ contents });
         const text = result.candidates[0].content.parts[0].text;
         const parsed = safeParseJSON(text);
         
@@ -113,7 +136,7 @@ app.post('/api/chat', async (req, res) => {
             { role: 'user', parts: [{ text: `You are Doctor AI. Respond in ${language}. User says: ${message}` }] }
         ];
 
-        const result = await callGeminiDirect({ contents });
+        const result = await generateWithFallback({ contents });
         res.json({ response: result.candidates[0].content.parts[0].text });
     } catch (error: any) {
         res.json({ response: "AI is busy. Please try again." });
@@ -135,7 +158,7 @@ app.post('/api/alerts', async (req, res) => {
         }
 
         const prompt = `Provide agricultural alerts for lat:${latitude}, lon:${longitude}, weather:${JSON.stringify(weatherData)} in JSON: { "region": "name", "alerts": ["a1"], "weather": { "temp": "25C", "humidity": "60%", "condition": "Clear" } }. Respond in ${language}.`;
-        const result = await callGeminiDirect({ contents: [{ parts: [{ text: prompt }] }] });
+        const result = await generateWithFallback({ contents: [{ parts: [{ text: prompt }] }] });
         res.json(safeParseJSON(result.candidates[0].content.parts[0].text));
     } catch (error: any) {
         res.json({ "region": "Current Location", "alerts": ["No risk"], "weather": { "temp": "N/A", "humidity": "N/A", "condition": "Cloudy" } });
@@ -146,7 +169,7 @@ app.post('/api/encyclopedia', async (req, res) => {
     try {
         const { query, language = 'English' } = req.body;
         const prompt = `Info for "${query}" in JSON with cropName, scientificName, description, growthCycle, commonDiseases, idealSoil, optimalHarvest, imageUrl. Respond in ${language}.`;
-        const result = await callGeminiDirect({ contents: [{ parts: [{ text: prompt }] }] });
+        const result = await generateWithFallback({ contents: [{ parts: [{ text: prompt }] }] });
         res.json(safeParseJSON(result.candidates[0].content.parts[0].text));
     } catch (error) {
         res.status(500).json({ error: "Data unavailable" });
