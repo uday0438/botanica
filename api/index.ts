@@ -10,12 +10,20 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
-const apiKey = process.env.GEMINI_API_KEY;
-const weatherApiKey = process.env.OPENWEATHER_API_KEY;
+// Sanitize the API Key to prevent 404 errors caused by hidden spaces
+const apiKey = (process.env.GEMINI_API_KEY || "").trim();
+const weatherApiKey = (process.env.OPENWEATHER_API_KEY || "").trim();
 
-const genAI = new GoogleGenerativeAI(apiKey || "");
-// Use 1.5 Flash as primary for maximum stability/availability
-const MODELS = ["gemini-1.5-flash-latest", "gemini-1.5-flash", "gemini-1.5-pro-latest", "gemini-1.5-pro", "gemini-2.0-flash-exp"];
+const genAI = new GoogleGenerativeAI(apiKey);
+
+// Comprehensive list of model names to handle regional and SDK version differences
+const MODELS = [
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-latest",
+    "gemini-1.5-pro",
+    "gemini-2.0-flash-exp",
+    "gemini-pro-vision" 
+];
 
 const safetySettings = [
   { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -43,11 +51,21 @@ async function generateWithFallback(buildRequest: (modelName: string) => Promise
         } catch (error: any) {
             console.error(`❌ Error with ${modelName}:`, error.message);
             lastError = error;
-            if (error?.status === 429 || error?.status === 503 || error?.status === 504) continue;
+            
+            // CONTINUE if the model is missing (404), overloaded (429/503), or has a server error (500)
+            const status = error?.status || 0;
+            const message = (error?.message || "").toLowerCase();
+            
+            if (status === 404 || status === 429 || status === 503 || status === 504 || status === 500 || message.includes("not found")) {
+                console.log(`🔄 Fallback: ${modelName} unavailable, trying next...`);
+                continue;
+            }
+            
+            // If it's a different type of error (like an invalid key), stop and report it
             throw error;
         }
     }
-    throw lastError || new Error('All models exhausted');
+    throw lastError || new Error('All models exhausted. Please check your API key permissions.');
 }
 
 function safeParseJSON(text: string) {
