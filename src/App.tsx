@@ -519,6 +519,42 @@ export default function App() {
     }
   };
 
+  const resizeImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target?.result as string;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX_WIDTH = 1024;
+                const MAX_HEIGHT = 1024;
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height) {
+                    if (width > MAX_WIDTH) {
+                        height *= MAX_WIDTH / width;
+                        width = MAX_WIDTH;
+                    }
+                } else {
+                    if (height > MAX_HEIGHT) {
+                        width *= MAX_HEIGHT / height;
+                        height = MAX_HEIGHT;
+                    }
+                }
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx?.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', 0.7).split(',')[1]);
+            };
+        };
+        reader.onerror = reject;
+    });
+};
+
   const handleAnalyze = async () => {
     if (imageFiles.length === 0) {
         toast.error('Please upload an image first.');
@@ -538,17 +574,8 @@ export default function App() {
 
     try {
         const imagesData = await Promise.all(imageFiles.map(async (file) => {
-            const base64 = await new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = () => {
-                    const b64 = reader.result?.toString().split(',')[1];
-                    if (b64) resolve(b64);
-                    else reject(new Error('Failed to extract base64'));
-                };
-                reader.onerror = reject;
-            });
-            return { data: base64, mimeType: file.type };
+            const base64 = await resizeImage(file);
+            return { data: base64, mimeType: 'image/jpeg' };
         }));
 
         const response = await fetch(`${API_BASE_URL}/api/analyze`, {
