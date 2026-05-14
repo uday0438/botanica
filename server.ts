@@ -110,22 +110,41 @@ ${JSON.stringify(soilReference)}
 
 Identify:
 1. The plant/fruit/vegetable species - BE SPECIFIC and align with the grounding data provided above.
-2. Any disease, pest damage, nutrient deficiency, or health issue visible
-3. Provide actionable treatment solutions
-4. Estimate soil fertility parameters
-5. Calculate approximate fertilizer requirements and costs in Indian Rupees (INR)
-6. Recommend the best next crop for soil recovery
+2. The specific type (Fruit, Vegetable, Leaf, or Crop).
+3. Any disease, pest damage, nutrient deficiency, or health issue visible.
+4. Provide actionable treatment solutions.
+5. Estimate soil fertility parameters.
+6. Calculate approximate chemical fertilizer requirements, their costs in Indian Rupees (INR), and their specific effects on soil health.
+7. Provide organic fertilizer alternatives and their benefits.
+8. Current average market price per unit (kg/quintal) for the identified healthy crop.
+9. Recommend the best next crop for soil recovery.
 
 Reference data: ${JSON.stringify(knowledgeBase.fertilizer_logic)}
 
 Return valid JSON:
 {
-    "plantName": "Identify the specific crop (e.g., Tomato, Chilli, Rice, Cotton, etc.)",
-    "diseaseResult": "Name of disease or 'Healthy' (use Kaggle-style naming if possible)",
+    "plantName": "Common name of the plant",
+    "plantType": "Fruit | Vegetable | Leaf | Crop",
+    "diseaseResult": "Name of disease or 'Healthy'",
     "solution": "Detailed treatment",
-    "preventiveMeasures": ["measure 1", "measure 2", "measure 3"],
+    "preventiveMeasures": ["measure 1", "measure 2"],
     "soilFertility": { "pH": "value", "nitrogen": "Low/Medium/High", "phosphorus": "Low/Medium/High", "potassium": "Low/Medium/High", "soilType": "type" },
-    "fertilizerCost": { "urea": "cost INR", "dap": "cost INR", "mop": "cost INR", "totalCost": "total INR" },
+    "fertilizerDetails": {
+        "chemical": {
+            "urea": { "quantity": "kg", "cost": "INR", "effect": "Effect on soil/plant" },
+            "dap": { "quantity": "kg", "cost": "INR", "effect": "Effect on soil/plant" },
+            "mop": { "quantity": "kg", "cost": "INR", "effect": "Effect on soil/plant" },
+            "totalCost": "total INR"
+        },
+        "organic": [
+            { "name": "Fertilizer name", "benefit": "Specific benefit", "application": "How to apply" }
+        ]
+    },
+    "marketInsights": {
+        "currentPrice": "INR per unit",
+        "priceTrend": "Increasing/Decreasing/Stable",
+        "marketDemand": "High/Medium/Low"
+    },
     "nextCropRecommendation": "crop with reason"
 }`;
 
@@ -168,30 +187,80 @@ Modify the "solution" to account for whether the current treatment is working.`;
             const fallbacks: any = {
                 "Hindi": {
                     "plantName": "अज्ञात नमूना",
+                    "plantType": "Crop",
                     "diseaseResult": "सिम्युलेटेड विश्लेषण (सेवा व्यस्त)",
                     "solution": "हमारे AI सर्वर पर वर्तमान में बहुत अधिक ट्रैफ़िक है। सामान्य पैटर्न के आधार पर, कृपया सुनिश्चित करें कि पौधे को पर्याप्त पानी मिले, कीटों की जांच करें और यदि आपको संक्रमण का संदेह हो तो पौधे को अलग करें।",
                     "preventiveMeasures": ["मिट्टी की नमी बनाए रखें", "सूरज की रोशनी सुनिश्चित करें", "नियमित निरीक्षण करें", "साफ औजारों का उपयोग करें"],
                     "soilFertility": { "pH": "6.5", "nitrogen": "Medium", "phosphorus": "Low", "potassium": "Medium", "soilType": "दोमट मिट्टी" },
-                    "fertilizerCost": { "urea": "₹450", "dap": "₹1,200", "mop": "₹850", "totalCost": "₹2,500" },
+                    "fertilizerDetails": {
+                        "chemical": {
+                            "urea": { "quantity": "50kg/acre", "cost": "₹450", "effect": "नाइट्रोजन स्तर को तेजी से बढ़ाता है लेकिन अधिक उपयोग से मिट्टी अम्लीय हो सकती है।" },
+                            "dap": { "quantity": "100kg/acre", "cost": "₹1,200", "effect": "जड़ों के विकास में मदद करता है।" },
+                            "mop": { "quantity": "50kg/acre", "cost": "₹850", "effect": "रोग प्रतिरोधक क्षमता बढ़ाता है।" },
+                            "totalCost": "₹2,500"
+                        },
+                        "organic": [
+                            { "name": "वर्मीकम्पोस्ट", "benefit": "मिट्टी की बनावट में सुधार करता है।", "application": "पौधे के आधार के चारों ओर 2-3 किलोग्राम डालें।" },
+                            { "name": "नीम का तेल", "benefit": "प्राकृतिक कीट विकर्षक।", "application": "पानी के साथ मिलाकर पत्तियों पर स्प्रे करें।" }
+                        ]
+                    },
+                    "marketInsights": {
+                        "currentPrice": "₹2,400/क्विंटल",
+                        "priceTrend": "Stable",
+                        "marketDemand": "High"
+                    },
                     "nextCropRecommendation": "नाइट्रोजन बहाल करने के लिए फलियां (मटर/बीन्स)।"
                 },
                 "Telugu": {
                     "plantName": "తెలియని నమూనా",
+                    "plantType": "Crop",
                     "diseaseResult": "సిమ్యులేటెడ్ విశ్లేషణ (సర్వర్ బిజీ)",
                     "solution": "మా AI సర్వర్‌లలో ప్రస్తుతం రద్దీ ఎక్కువగా ఉంది. సాధారణ పద్ధతుల ఆధారంగా, మొక్కకు తగినంత నీరు అందేలా చూడండి, కీటకాలను గమనించండి.",
                     "preventiveMeasures": ["నేల తేమను నిర్వహించండి", "సూర్యరశ్మిని నిర్ధారించండి", "క్రమం తప్పకుండా తనిఖీ చేయండి"],
                     "soilFertility": { "pH": "6.5", "nitrogen": "Medium", "phosphorus": "Low", "potassium": "Medium", "soilType": "ఒండ్రు నేల" },
-                    "fertilizerCost": { "urea": "₹450", "dap": "₹1,200", "mop": "₹850", "totalCost": "₹2,500" },
+                    "fertilizerDetails": {
+                        "chemical": {
+                            "urea": { "quantity": "50kg/acre", "cost": "₹450", "effect": "నత్రజని స్థాయిని త్వరగా పెంచుతుంది." },
+                            "dap": { "quantity": "100kg/acre", "cost": "₹1,200", "effect": "వేర్ల అభివృద్ధికి సహాయపడుతుంది." },
+                            "mop": { "quantity": "50kg/acre", "cost": "₹850", "effect": "వ్యాధి నిరోధక శక్తిని పెంచుతుంది." },
+                            "totalCost": "₹2,500"
+                        },
+                        "organic": [
+                            { "name": "వర్మీ కంపోస్ట్", "benefit": "నేల సారాన్ని పెంచుతుంది.", "application": "మొక్క మొదట్లో 2-3 కిలోలు వేయాలి." }
+                        ]
+                    },
+                    "marketInsights": {
+                        "currentPrice": "₹2,400/క్వింటాల్",
+                        "priceTrend": "Stable",
+                        "marketDemand": "High"
+                    },
                     "nextCropRecommendation": "నత్రజని పెంచడానికి పప్పుధాన్యాలు."
                 }
             };
             return fallbacks[lang] || {
                 "plantName": "Unknown Specimen",
+                "plantType": "Crop",
                 "diseaseResult": "Simulated Analysis (Service Busy)",
                 "solution": "AI servers are busy. Check hydration, pests, and air circulation.",
                 "preventiveMeasures": ["Maintain soil moisture", "Ensure sunlight", "Regular inspection"],
                 "soilFertility": { "pH": "6.5", "nitrogen": "Medium", "phosphorus": "Low", "potassium": "Medium", "soilType": "Loamy Soil" },
-                "fertilizerCost": { "urea": "₹450", "dap": "₹1,200", "mop": "₹850", "totalCost": "₹2,500" },
+                "fertilizerDetails": {
+                    "chemical": {
+                        "urea": { "quantity": "50kg/acre", "cost": "₹450", "effect": "Rapidly increases nitrogen but may acidity soil if overused." },
+                        "dap": { "quantity": "100kg/acre", "cost": "₹1,200", "effect": "Promotes strong root development." },
+                        "mop": { "quantity": "50kg/acre", "cost": "₹850", "effect": "Increases disease resistance." },
+                        "totalCost": "₹2,500"
+                    },
+                    "organic": [
+                        { "name": "Vermicompost", "benefit": "Improves soil texture and microbial activity.", "application": "Apply 2-3kg around the plant base." },
+                        { "name": "Neem Oil", "benefit": "Natural pest repellent.", "application": "Spray 5ml/liter on leaves." }
+                    ]
+                },
+                "marketInsights": {
+                    "currentPrice": "₹2,400/quintal",
+                    "priceTrend": "Stable",
+                    "marketDemand": "High"
+                },
                 "nextCropRecommendation": "Legumes to restore nitrogen."
             };
         };

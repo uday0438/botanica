@@ -136,21 +136,43 @@
         background: rgba(30, 30, 30, 0.7);
         border: 1px solid rgba(255, 255, 255, 0.1);
     }
+
+    .bg-gradient-conic {
+        background-image: conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops));
+    }
+
+    @keyframes scan {
+        0% { transform: translateY(0); opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { transform: translateY(100vh); opacity: 0; }
+    }
+
+    .animate-scan {
+        animation: scan 3s linear infinite;
+    }
+
+    .animate-spin-slow {
+        animation: spin 10s linear infinite;
+    }
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
-    }
+    border-color: var(--border);
+    outline-color: color-mix(in srgb, var(--ring), transparent 50%);
+  }
   body {
-    @apply bg-background text-foreground font-sans;
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
     -webkit-tap-highlight-color: transparent;
-    }
+  }
   html {
-    @apply font-sans;
+    font-family: var(--font-sans);
     scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
-    }
+  }
 }
 
 /* Mobile-first responsive adjustments */

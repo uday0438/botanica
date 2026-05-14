@@ -1,25 +1,21 @@
 {
+  "name": "Botanica AI",
   "short_name": "Botanica",
-  "name": "Botanica: Precision Agriculture AI",
+  "description": "Professional Agricultural AI Management Tool",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#16a34a",
   "icons": [
     {
-      "src": "favicon.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon"
+      "src": "https://cdn-icons-png.flaticon.com/512/628/628283.png",
+      "sizes": "192x192",
+      "type": "image/png"
     },
     {
-      "src": "logo192.png",
-      "type": "image/png",
-      "sizes": "192x192"
-    },
-    {
-      "src": "logo512.png",
-      "type": "image/png",
-      "sizes": "512x512"
+      "src": "https://cdn-icons-png.flaticon.com/512/628/628283.png",
+      "sizes": "512x512",
+      "type": "image/png"
     }
-  ],
-  "start_url": ".",
-  "display": "standalone",
-  "theme_color": "#3A5A40",
-  "background_color": "#F8F9F5"
+  ]
 }

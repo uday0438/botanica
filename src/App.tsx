@@ -7,7 +7,7 @@ import {
   Sprout, IndianRupee, History, Star,
   MessageSquare, ChevronLeft, Send, CheckCircle2, X,
   Share2, MapPin, BookOpen, GitCompare, TrendingUp, Activity, Camera, Mic, Globe, AlertCircle,
-  Sun, Moon
+  Sun, Moon, Volume2, Square
 } from 'lucide-react';
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { Toaster, toast } from 'sonner';
@@ -68,6 +68,16 @@ const TRANSLATIONS: Record<string, any> = {
     fix_id: "Fix Misidentification",
     doctor_chat_prompt: "How can I help your farm today?",
     active_expert: "Active • Expert Response",
+    about_us: "About Us",
+    plant_type: "Specimen Type",
+    market_price: "Market Value",
+    price_trend: "Price Trend",
+    market_demand: "Demand Level",
+    chemical_fertilizer: "Chemical Fertilizer",
+    organic_alternatives: "Organic Alternatives",
+    effect_on_soil: "Soil Effect",
+    benefit: "Benefit",
+    application: "Application",
   },
   Hindi: {
     app_title: "बोटानिका",
@@ -117,6 +127,7 @@ const TRANSLATIONS: Record<string, any> = {
     fix_id: "गलत पहचान ठीक करें",
     doctor_chat_prompt: "आज मैं आपके खेत की क्या मदद कर सकता हूँ?",
     active_expert: "सक्रिय • विशेषज्ञ प्रतिक्रिया",
+    about_us: "हमारे बारे में",
   },
   Telugu: {
     app_title: "బొటానికా",
@@ -166,6 +177,7 @@ const TRANSLATIONS: Record<string, any> = {
     fix_id: "తప్పుడు గుర్తింపును సరిచేయండి",
     doctor_chat_prompt: "ఈ రోజు నేను మీ పొలానికి ఎలా సహాయం చేయగలను?",
     active_expert: "యాక్టివ్ • నిపుణుల స్పందన",
+    about_us: "మా గురించి",
   },
   Marathi: {
     app_title: "बोटॅनिका",
@@ -215,6 +227,7 @@ const TRANSLATIONS: Record<string, any> = {
     fix_id: "चुकीची ओळख दुरुस्त करा",
     doctor_chat_prompt: "आज मी तुमच्या शेतासाठी कशी मदत करू शकतो?",
     active_expert: "सक्रिय • तज्ञ प्रतिसाद",
+    about_us: "आमच्याबद्दल",
   },
   Punjabi: {
     app_title: "ਬੋਟਾਨਿਕਾ",
@@ -272,7 +285,8 @@ const API_BASE_URL = typeof window !== 'undefined' ? window.location.origin : 'h
 
 // --- Type Definitions ---
 interface CropAnalysis {
-  plantName?: string;
+  plantName: string;
+  plantType: string;
   diseaseResult: string;
   solution: string;
   preventiveMeasures: string[];
@@ -283,11 +297,23 @@ interface CropAnalysis {
     potassium: string;
     soilType: string;
   };
-  fertilizerCost: {
-    urea: string;
-    dap: string;
-    mop: string;
-    totalCost: string;
+  fertilizerDetails: {
+    chemical: {
+      urea: { quantity: string; cost: string; effect: string };
+      dap: { quantity: string; cost: string; effect: string };
+      mop: { quantity: string; cost: string; effect: string };
+      totalCost: string;
+    };
+    organic: Array<{
+      name: string;
+      benefit: string;
+      application: string;
+    }>;
+  };
+  marketInsights: {
+    currentPrice: string;
+    priceTrend: string;
+    marketDemand: string;
   };
   nextCropRecommendation: string;
 }
@@ -330,12 +356,13 @@ export default function App() {
   const [isAppLoading, setIsAppLoading] = useState(true);
   
   // Navigation & States
-  type ViewMode = 'analyze' | 'encyclopedia' | 'history' | 'chat' | 'field';
+  type ViewMode = 'analyze' | 'encyclopedia' | 'history' | 'chat' | 'field' | 'about';
   const [viewMode, setViewMode] = useState<ViewMode>('analyze');
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [showFeedback, setShowFeedback] = useState(false);
   const [showCorrection, setShowCorrection] = useState(false);
   const [currentId, setCurrentId] = useState<string | null>(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const [userCoords, setUserCoords] = useState<{latitude: number, longitude: number} | null>(null);
   const [activeTab, setActiveTab] = useState<'Diagnosis' | 'Soil' | 'Fertilizer' | 'Recommendations'>('Diagnosis');
   const [selectedLanguage, setSelectedLanguage] = useState('English');
@@ -685,49 +712,111 @@ export default function App() {
     }
   };
 
-  const startSpeechRecognition = () => {
+  const startSpeechRecognition = (target: 'chat' | 'encyclopedia' = 'chat') => {
     if (!('webkitSpeechRecognition' in window)) {
         toast.error("Voice recognition not supported in this browser.");
         return;
     }
 
     const recognition = new (window as any).webkitSpeechRecognition();
-    recognition.lang = selectedLanguage === 'Hindi' ? 'hi-IN' : 'en-US';
+    const langMap: Record<string, string> = {
+      'English': 'en-US',
+      'Hindi': 'hi-IN',
+      'Telugu': 'te-IN'
+    };
+    recognition.lang = langMap[selectedLanguage] || 'en-US';
     recognition.interimResults = false;
 
-    recognition.onstart = () => setIsRecording(true);
+    recognition.onstart = () => {
+      setIsRecording(true);
+      toast.info('Listening...', { icon: <Mic className="w-4 h-4 text-leaf animate-pulse" /> });
+    };
     recognition.onend = () => setIsRecording(false);
     recognition.onerror = () => setIsRecording(false);
     
     recognition.onresult = (event: any) => {
         const text = event.results[0][0].transcript;
-        setChatInput(text);
+        if (target === 'encyclopedia') {
+          setEncSearch(text);
+          // Wait a bit for state to update then search
+          setTimeout(() => handleEncSearch(), 100);
+        } else {
+          setChatInput(text);
+        }
         toast.success("Speech captured!");
     };
 
     recognition.start();
   };
 
+  const handleSpeak = () => {
+    if (!analysisResult) return;
+    
+    // Cancel any existing speech
+    window.speechSynthesis.cancel();
+    
+    const textToSpeak = `${analysisResult.plantName}: ${analysisResult.diseaseResult}. Solution: ${analysisResult.solution}`;
+    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+    
+    const langMap: Record<string, string> = {
+      'English': 'en-US',
+      'Hindi': 'hi-IN',
+      'Telugu': 'te-IN'
+    };
+    utterance.lang = langMap[selectedLanguage] || 'en-US';
+    
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handleStopSpeak = () => {
+    window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+  };
+
   const requestLocationAndAlerts = () => {
     setIsFetchingAlerts(true);
+    setLocalAlerts(null); // Clear previous results to show loading
     
     if (!navigator.geolocation) {
-      toast.error("Geolocation not supported.");
+      toast.error("Geolocation not supported by your browser.");
       setIsFetchingAlerts(false);
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setUserCoords({ latitude: position.coords.latitude, longitude: position.coords.longitude });
-        fetchAlertsForCoords(position.coords.latitude, position.coords.longitude);
-      }, 
-      () => {
-        setIsFetchingAlerts(false);
-        toast.error("Location access denied.");
-      },
-      { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 }
-    );
+    const options = { 
+      enableHighAccuracy: true, 
+      timeout: 10000, 
+      maximumAge: 0 
+    };
+
+    const success = (position: GeolocationPosition) => {
+      const { latitude, longitude } = position.coords;
+      setUserCoords({ latitude, longitude });
+      fetchAlertsForCoords(latitude, longitude);
+    };
+
+    const error = (err: GeolocationPositionError) => {
+      // Fallback to low accuracy if high accuracy fails (common on some desktops/browsers)
+      if (err.code === err.PERMISSION_DENIED) {
+          setIsFetchingAlerts(false);
+          toast.error("Location access denied. Please enable permissions in browser settings.");
+      } else if (options.enableHighAccuracy) {
+          console.warn("High accuracy failed, retrying with low accuracy...");
+          navigator.geolocation.getCurrentPosition(success, (finalErr) => {
+              setIsFetchingAlerts(false);
+              toast.error(`Location error: ${finalErr.message}`);
+          }, { ...options, enableHighAccuracy: false });
+      } else {
+          setIsFetchingAlerts(false);
+          toast.error(`Location error: ${err.message}`);
+      }
+    };
+
+    navigator.geolocation.getCurrentPosition(success, error, options);
   };
 
   const calculateSoilScore = (s: CropAnalysis['soilFertility']) => {
@@ -848,6 +937,9 @@ export default function App() {
            <button onClick={() => setViewMode('field')} className={`px-3 sm:px-5 py-1.5 sm:py-2 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-widest transition-all ${viewMode === 'field' ? 'bg-amber-600 text-white shadow-md' : 'text-stone-500 dark:text-stone-400 hover:bg-white dark:hover:bg-stone-800'}`}>
              <Globe className="w-3 h-3 sm:w-3.5 sm:h-3.5 inline mr-0.5 sm:mr-1" /> Field Hub
            </button>
+           <button onClick={() => setViewMode('about')} className={`px-3 sm:px-5 py-1.5 sm:py-2 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-widest transition-all ${viewMode === 'about' ? 'bg-indigo-600 text-white shadow-md' : 'text-stone-500 dark:text-stone-400 hover:bg-white dark:hover:bg-stone-800'}`}>
+             <Info className="w-3 h-3 sm:w-3.5 sm:h-3.5 inline mr-0.5 sm:mr-1" /> {t.about_us}
+           </button>
         </div>
       </header>
 
@@ -857,17 +949,26 @@ export default function App() {
         {viewMode === 'encyclopedia' && (
            <motion.div key="encyclopedia-view" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="max-w-[1600px] mx-auto flex flex-col gap-6">
               <div className="glass-card p-8 rounded-[2rem] shadow-sm relative overflow-hidden text-center">
-                  <h2 className="serif text-3xl font-semibold text-stone-800 mb-2 mt-4">{t.encyclopedia}</h2>
+                  <h2 className="serif text-3xl font-semibold text-stone-800 dark:text-stone-100 mb-2 mt-4">{t.encyclopedia}</h2>
                   <p className="text-stone-500 mb-8 max-w-lg mx-auto">{t.search_placeholder}</p>
                   
                   <form onSubmit={handleEncyclopediaSearch} className="flex gap-2 max-w-xl mx-auto relative z-10">
-                    <div className="relative flex-1">
-                       <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" />
-                       <input 
-                          value={encSearch} onChange={e => setEncSearch(e.target.value)}
-                          placeholder={t.search_placeholder} 
-                          className="w-full pl-12 pr-4 py-4 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-inner outline-none focus:border-leaf font-sans text-lg bg-white dark:bg-stone-900 bg-opacity-90 dark:bg-opacity-90 dark:text-white transition-colors"
-                       />
+                    <div className="relative flex-1 flex items-center gap-2">
+                       <button 
+                           type="button"
+                           onClick={() => startSpeechRecognition('encyclopedia')}
+                           className={`p-3 rounded-2xl transition-all flex-shrink-0 ${isRecording ? 'bg-red-100 text-red-500 animate-pulse' : 'bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-400 hover:text-leaf shadow-sm'}`}
+                       >
+                           <Mic className="w-5 h-5" />
+                       </button>
+                       <div className="relative flex-1">
+                          <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" />
+                          <input 
+                             value={encSearch} onChange={e => setEncSearch(e.target.value)}
+                             placeholder={t.search_placeholder} 
+                             className="w-full pl-12 pr-4 py-4 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-inner outline-none focus:border-leaf font-sans text-lg bg-white dark:bg-stone-900 bg-opacity-90 dark:bg-opacity-90 dark:text-white transition-colors"
+                          />
+                       </div>
                     </div>
                     <Button type="submit" disabled={isEncSearching} className="h-auto px-8 rounded-2xl bg-leaf hover:bg-leaf/90 shadow-lg text-lg">
                        {isEncSearching ? <span className="animate-spin w-5 h-5 border-2 border-white/60 border-t-white rounded-full" /> : t.analyze}
@@ -876,7 +977,7 @@ export default function App() {
               </div>
 
               {encResult && !isEncSearching && (
-                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-8 rounded-[2rem] border border-stone-200 shadow-sm flex flex-col gap-6 relative">
+                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white dark:bg-stone-900 p-8 rounded-[2rem] border border-stone-200 dark:border-stone-800 shadow-sm flex flex-col gap-6 relative">
                     <div className="flex flex-col lg:flex-row gap-8">
                              {/* Crop Image */}
                              <div className="w-full lg:w-1/3 aspect-square rounded-[2rem] overflow-hidden shadow-lg border-4 border-white">
@@ -892,29 +993,29 @@ export default function App() {
                        
                        <div className="flex-1">
                           <h3 className="serif text-4xl font-bold text-leaf mb-2">{encResult.cropName}</h3>
-                          <p className="font-mono text-sm uppercase tracking-widest text-stone-400 bg-stone-50 inline-block px-3 py-1 rounded w-max mb-4">{encResult.scientificName}</p>
-                          <p className="text-stone-700 leading-relaxed text-lg border-l-4 border-leaf/30 pl-4">{encResult.description}</p>
+                          <p className="font-mono text-sm uppercase tracking-widest text-stone-400 bg-stone-50 dark:bg-stone-800 inline-block px-3 py-1 rounded w-max mb-4">{encResult.scientificName}</p>
+                          <p className="text-stone-700 dark:text-stone-300 leading-relaxed text-lg border-l-4 border-leaf/30 pl-4">{encResult.description}</p>
                        </div>
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                       <div className="bg-stone-50 p-5 rounded-2xl border border-stone-100">
+                       <div className="bg-stone-50 dark:bg-stone-800 p-5 rounded-2xl border border-stone-100 dark:border-stone-700">
                           <h4 className="text-[10px] uppercase font-bold text-stone-400 mb-2 tracking-wider"><Lightbulb className="w-3 h-3 inline mr-1"/> {t.growth_cycle}</h4>
-                          <p className="text-stone-800 font-medium leading-snug">{encResult.growthCycle}</p>
+                          <p className="text-stone-800 dark:text-stone-100 font-medium leading-snug">{encResult.growthCycle}</p>
                        </div>
-                       <div className="bg-stone-50 p-5 rounded-2xl border border-stone-100">
+                       <div className="bg-stone-50 dark:bg-stone-800 p-5 rounded-2xl border border-stone-100 dark:border-stone-700">
                           <h4 className="text-[10px] uppercase font-bold text-stone-400 mb-2 tracking-wider"><AlertTriangle className="w-3 h-3 inline mr-1"/> Common Diseases</h4>
-                          <ul className="text-stone-800 font-medium leading-snug list-disc pl-4 space-y-1">
+                          <ul className="text-stone-800 dark:text-stone-100 font-medium leading-snug list-disc pl-4 space-y-1">
                              {encResult.commonDiseases.map((d, i) => <li key={i}>{d}</li>)}
                           </ul>
                        </div>
-                       <div className="bg-stone-50 p-5 rounded-2xl border border-stone-100">
+                       <div className="bg-stone-50 dark:bg-stone-800 p-5 rounded-2xl border border-stone-100 dark:border-stone-700">
                           <h4 className="text-[10px] uppercase font-bold text-stone-400 mb-2 tracking-wider"><Thermometer className="w-3 h-3 inline mr-1"/> {t.ideal_soil}</h4>
-                          <p className="text-stone-800 font-medium leading-snug">{encResult.idealSoil}</p>
+                          <p className="text-stone-800 dark:text-stone-100 font-medium leading-snug">{encResult.idealSoil}</p>
                        </div>
-                       <div className="bg-stone-50 p-5 rounded-2xl border border-stone-100">
+                       <div className="bg-stone-50 dark:bg-stone-800 p-5 rounded-2xl border border-stone-100 dark:border-stone-700">
                           <h4 className="text-[10px] uppercase font-bold text-stone-400 mb-2 tracking-wider"><Sprout className="w-3 h-3 inline mr-1"/> {t.optimal_harvest}</h4>
-                          <p className="text-stone-800 font-medium leading-snug">{encResult.optimalHarvest}</p>
+                          <p className="text-stone-800 dark:text-stone-100 font-medium leading-snug">{encResult.optimalHarvest}</p>
                        </div>
                     </div>
                  </motion.div>
@@ -980,27 +1081,36 @@ export default function App() {
               <div className="col-span-1 lg:col-span-4 flex flex-col gap-6">
                 
                 {/* Geolocation Alerts Panel */}
-                <div className="glass-card p-5 rounded-[2rem] shadow-sm border border-stone-200 dark:border-stone-800 bg-white/70 dark:bg-stone-900/70">
-                   <div className="flex justify-between items-center mb-3">
-                     <h3 className="text-xs font-bold uppercase tracking-widest text-stone-600 dark:text-stone-400 flex items-center gap-1.5"><MapPin className="w-4 h-4 text-leaf"/> {t.local_trends}</h3>
-                     {!localAlerts && (
-                        <button onClick={requestLocationAndAlerts} disabled={isFetchingAlerts} className="text-[10px] bg-leaf/10 text-leaf hover:bg-leaf hover:text-white transition-colors px-3 py-1 rounded-full font-bold">
-                           {isFetchingAlerts ? t.fetching : t.btn_detect}
-                        </button>
-                     )}
-                   </div>
-                   {localAlerts ? (
-                      <div className="p-3 bg-red-50/50 border border-red-100 rounded-xl">
-                         <p className="text-xs text-red-500 font-bold mb-2">Region: <span className="font-medium text-stone-700">{localAlerts.region}</span></p>
-                         <ul className="text-xs text-stone-700 max-w-[250px] leading-relaxed space-y-1">
-                            {localAlerts.alerts.map((a, i) => <li key={i} className="flex items-start gap-1"><AlertTriangle className="w-3 h-3 mt-0.5 shrink-0 text-red-400" /> {a}</li>)}
-                         </ul>
-                      </div>
-                   ) : (
-                      <p className="text-[11px] text-stone-400">Share location to receive real-time regional pest & disease outbreak telemetry.</p>
-                   )}
-                </div>
-
+                 <div className="glass-card p-5 rounded-[2rem] shadow-sm border border-stone-200 dark:border-stone-800 bg-white/70 dark:bg-stone-900/70">
+                    <div className="flex justify-between items-center mb-3">
+                      <h3 className="text-xs font-bold uppercase tracking-widest text-stone-600 dark:text-stone-400 flex items-center gap-1.5"><MapPin className="w-4 h-4 text-leaf"/> {t.local_trends}</h3>
+                      <button 
+                         onClick={requestLocationAndAlerts} 
+                         disabled={isFetchingAlerts} 
+                         className={`text-[10px] transition-colors px-3 py-1 rounded-full font-bold flex items-center gap-2 ${localAlerts ? 'bg-stone-100 dark:bg-stone-800 text-stone-500' : 'bg-leaf/10 text-leaf hover:bg-leaf hover:text-white'}`}
+                      >
+                         {isFetchingAlerts ? <span className="animate-spin w-3 h-3 border-2 border-leaf border-t-transparent rounded-full" /> : (localAlerts ? 'Refresh' : t.btn_detect)}
+                      </button>
+                    </div>
+                    {localAlerts ? (
+                       <div className="p-3 bg-red-50/50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-xl">
+                          <div className="flex items-center gap-2 mb-2 text-red-600 dark:text-red-400">
+                             <Globe className="w-3 h-3" />
+                             <span className="text-xs font-bold uppercase tracking-tight">{localAlerts.region}</span>
+                          </div>
+                          <ul className="text-xs text-stone-700 dark:text-stone-300 max-w-[250px] leading-relaxed space-y-1">
+                             {localAlerts.alerts.map((a, i) => <li key={i} className="flex items-start gap-1"><AlertTriangle className="w-3 h-3 mt-0.5 shrink-0 text-red-400" /> {a}</li>)}
+                          </ul>
+                       </div>
+                    ) : isFetchingAlerts ? (
+                       <div className="py-4 flex flex-col items-center justify-center gap-2 opacity-50">
+                          <MapPin className="w-8 h-8 text-leaf animate-bounce" />
+                          <p className="text-[10px] font-bold uppercase tracking-widest animate-pulse dark:text-stone-400">Detecting Location...</p>
+                       </div>
+                    ) : (
+                       <p className="text-[11px] text-stone-400">Share location to receive real-time regional pest & disease outbreak telemetry.</p>
+                    )}
+                 </div>
                 {/* Upload panel */}
                 <div className="glass-card p-6 rounded-[2rem] shadow-sm relative overflow-hidden border border-stone-200 dark:border-stone-800">
                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/leaf.png')] opacity-5 pointer-events-none"></div>
@@ -1133,13 +1243,13 @@ export default function App() {
                          {showCompare && (
                             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="absolute inset-0 bg-white/95 backdrop-blur-xl z-50 rounded-[2rem] flex flex-col shadow-2xl border border-stone-200 overflow-hidden">
                                <div className="p-4 border-b border-stone-200 flex justify-between items-center bg-stone-50">
-                                  <h3 className="text-sm font-bold uppercase tracking-widest text-stone-700"><GitCompare className="w-4 h-4 inline mr-2"/> Compare Diagnostics</h3>
+                                  <h3 className="text-sm font-bold uppercase tracking-widest text-stone-700 dark:text-stone-300"><GitCompare className="w-4 h-4 inline mr-2"/> Compare Diagnostics</h3>
                                   <button onClick={() => setShowCompare(false)} className="p-2 hover:bg-red-50 text-stone-400 hover:text-red-500 rounded-full transition-colors"><X className="w-5 h-5"/></button>
                                </div>
                                <div className="p-4 bg-stone-100 flex items-center justify-center border-b border-stone-200">
                                   <select 
                                      value={compareId} onChange={e => setCompareId(e.target.value)}
-                                     className="max-w-md w-full p-3 rounded-xl border border-stone-300 shadow-sm outline-none font-medium text-sm text-stone-700 cursor-pointer bg-white"
+                                     className="max-w-md w-full p-3 rounded-xl border border-stone-300 shadow-sm outline-none font-medium text-sm text-stone-700 dark:text-stone-300 cursor-pointer bg-white"
                                   >
                                      <option value="" disabled>Select a history item to compare with...</option>
                                      {history.filter(h => h.id !== currentId).map(h => (
@@ -1152,16 +1262,16 @@ export default function App() {
                                   <div className="w-1/2 p-6 border-r border-stone-200 flex flex-col gap-4">
                                      <h4 className="font-bold text-stone-500 uppercase text-[10px] tracking-widest">Current Analyzed Specimen</h4>
                                      <div className="rounded-2xl overflow-hidden border border-stone-200 shadow-sm"><img src={imagePreviewUrls[0]} className="w-full aspect-video object-cover"/></div>
-                                     <h2 className="serif text-2xl font-bold text-stone-800">{analysisResult.diseaseResult}</h2>
-                                     <p className="text-sm text-stone-600 leading-relaxed p-4 bg-leaf/5 rounded-xl border border-leaf/10">{analysisResult.solution}</p>
+                                     <h2 className="serif text-2xl font-bold text-stone-800 dark:text-stone-100">{analysisResult.diseaseResult}</h2>
+                                     <p className="text-sm text-stone-600 dark:text-stone-400 leading-relaxed p-4 bg-leaf/5 rounded-xl border border-leaf/10">{analysisResult.solution}</p>
                                   </div>
                                   <div className="w-1/2 p-6 flex flex-col gap-4 bg-stone-50/50">
                                      <h4 className="font-bold text-stone-500 uppercase text-[10px] tracking-widest">Historical Specimen</h4>
                                      {comparisonTarget ? (
                                         <>
                                           <div className="rounded-2xl overflow-hidden border border-stone-200 shadow-sm relative grayscale-[20%]"><img src={comparisonTarget.image} className="w-full aspect-video object-cover"/></div>
-                                          <h2 className="serif text-2xl font-bold text-stone-800">{comparisonTarget.analysis.diseaseResult}</h2>
-                                          <p className="text-sm text-stone-600 leading-relaxed p-4 bg-stone-100 rounded-xl border border-stone-200">{comparisonTarget.analysis.solution}</p>
+                                          <h2 className="serif text-2xl font-bold text-stone-800 dark:text-stone-100">{comparisonTarget.analysis.diseaseResult}</h2>
+                                          <p className="text-sm text-stone-600 dark:text-stone-400 leading-relaxed p-4 bg-stone-100 dark:bg-stone-800 rounded-xl border border-stone-200">{comparisonTarget.analysis.solution}</p>
                                         </>
                                      ) : (
                                         <div className="h-full flex items-center justify-center text-stone-400 text-sm italic">Please select an item from the dropdown to display comparison.</div>
@@ -1176,7 +1286,7 @@ export default function App() {
                         <div className="flex justify-between items-start mb-6">
                            <div>
                              {analysisResult.diseaseResult !== "Healthy Corn" && !analysisResult.diseaseResult.toLowerCase().includes("healthy") && (
-                                <span className="inline-block px-3 py-1 bg-red-50 text-red-700 text-[10px] font-bold uppercase tracking-widest rounded-full mb-2 border border-red-100">{t.infection_detected}</span>
+                                <span className="inline-block px-3 py-1 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-[10px] font-bold uppercase tracking-widest rounded-full mb-2 border border-red-100 dark:border-red-900/30">{t.infection_detected}</span>
                              )}
                                {analysisResult.plantName && (
                                 <div className="flex items-center gap-2 mb-2">
@@ -1187,7 +1297,7 @@ export default function App() {
                                     <span className="text-[10px] text-stone-500 font-bold uppercase tracking-wider">Kaggle-Grounded Identification</span>
                                 </div>
                               )}
-                              <h2 className="serif text-5xl font-bold text-stone-800 tracking-tighter leading-tight mb-2">
+                              <h2 className="serif text-5xl font-bold text-stone-800 dark:text-stone-100 tracking-tighter leading-tight mb-2">
                                 {analysisResult.plantName ? `${analysisResult.plantName}: ` : ''}{analysisResult.diseaseResult}
                               </h2>
                            </div>
@@ -1199,6 +1309,9 @@ export default function App() {
                              )}
                              <button onClick={() => window.print()} className="flex items-center gap-1.5 px-3 py-2 bg-leaf/10 hover:bg-leaf hover:text-white border border-leaf/20 text-xs font-bold text-leaf rounded-full shadow-sm transition-all uppercase tracking-wider">
                                 <CloudRain className="w-3.5 h-3.5" /> {t.download_report}
+                             </button>
+                             <button onClick={isSpeaking ? handleStopSpeak : handleSpeak} className={`p-2 border rounded-full shadow-sm transition-all ${isSpeaking ? 'bg-red-50 border-red-200 text-red-500 animate-pulse' : 'bg-stone-100/80 dark:bg-stone-800 border-stone-200 dark:border-stone-700 text-stone-500 hover:bg-leaf hover:border-leaf hover:text-white'}`} title={isSpeaking ? "Stop Speaking" : "Speak Results"}>
+                               {isSpeaking ? <Square className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
                              </button>
                              <button onClick={handleShare} className="p-2 bg-stone-100/80 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 hover:bg-leaf hover:border-leaf hover:text-white text-stone-500 rounded-full shadow-sm transition-all" title="Share Results">
                                <Share2 className="w-4 h-4" />
@@ -1223,14 +1336,28 @@ export default function App() {
                            {/* DIAGNOSIS TAB */}
                            {activeTab === 'Diagnosis' && (
                              <motion.div key="Diagnosis" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="flex flex-col gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                   <div className="bg-leaf/5 p-5 rounded-2xl border border-leaf/10">
+                                      <h4 className="text-[10px] uppercase font-bold text-leaf/80 mb-2 tracking-wider flex items-center gap-1"><Info className="w-3 h-3"/> {t.plant_type}</h4>
+                                      <p className="text-sm font-bold text-stone-800 dark:text-stone-100 capitalize">{analysisResult.plantType}</p>
+                                   </div>
+                                   <div className="bg-amber-50 p-5 rounded-2xl border border-amber-100">
+                                      <h4 className="text-[10px] uppercase font-bold text-amber-700 mb-2 tracking-wider flex items-center gap-1"><TrendingUp className="w-3 h-3"/> {t.market_price}</h4>
+                                      <div className="flex justify-between items-end">
+                                         <p className="text-sm font-bold text-stone-800 dark:text-stone-100">{analysisResult.marketInsights.currentPrice}</p>
+                                         <Badge className="text-[8px] bg-amber-200 text-amber-900 border-none">{analysisResult.marketInsights.priceTrend}</Badge>
+                                      </div>
+                                   </div>
+                                </div>
+
                                 <div className="bg-leaf/5 p-5 rounded-2xl border border-leaf/10 relative overflow-hidden">
                                    <div className="absolute top-0 right-0 w-24 h-24 bg-leaf/10 rounded-bl-full -z-10"></div>
                                    <h4 className="text-[10px] uppercase font-bold text-leaf/80 mb-2 tracking-wider flex items-center gap-1"><ShieldCheck className="w-3 h-3"/> Recommended Solution</h4>
-                                   <p className="text-sm leading-relaxed text-stone-800 font-medium">{analysisResult.solution}</p>
+                                   <p className="text-sm leading-relaxed text-stone-800 dark:text-stone-100 font-medium">{analysisResult.solution}</p>
                                 </div>
                                 <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-sm">
                                    <h4 className="text-[10px] uppercase font-bold text-stone-500 mb-3 tracking-wider">{t.preventive_measures}</h4>
-                                   <ul className="text-sm text-stone-600 space-y-3">
+                                   <ul className="text-sm text-stone-600 dark:text-stone-400 space-y-3">
                                       {analysisResult.preventiveMeasures.map((measure, idx) => (
                                         <li key={idx} className="flex gap-3 items-start leading-relaxed"><span className="text-leaf mt-1">•</span> {measure}</li>
                                       ))}
@@ -1280,7 +1407,7 @@ export default function App() {
                            {/* SOIL TAB */}
                            {activeTab === 'Soil' && (
                              <motion.div key="Soil" initial={{ opacity: 0, x: 5 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -5 }} className="h-full flex flex-col gap-4">
-                                <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm relative overflow-hidden">
+                                <div className="bg-white dark:bg-stone-900 p-6 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-sm relative overflow-hidden">
                                    
                                    {/* Soil Score Indicator */}
                                    <div className="absolute top-6 right-6 flex flex-col items-center justify-center">
@@ -1290,107 +1417,116 @@ export default function App() {
                                       <span className="text-[9px] uppercase font-bold tracking-widest text-stone-400 mt-2">{t.health_score}</span>
                                    </div>
 
-                                   <div className="flex items-center gap-2 mb-4 pb-4 border-b border-stone-100 pr-24">
-                                      <div className="p-2 bg-stone-100 rounded-lg"><Thermometer className="w-5 h-5 text-stone-500" /></div>
+                                   <div className="flex items-center gap-2 mb-4 pb-4 border-b border-stone-100 dark:border-stone-800 pr-24">
+                                      <div className="p-2 bg-stone-100 dark:bg-stone-800 rounded-lg"><Thermometer className="w-5 h-5 text-stone-500" /></div>
                                       <div>
-                                        <h4 className="text-sm font-bold text-stone-800">{t.composition}</h4>
+                                        <h4 className="text-sm font-bold text-stone-800 dark:text-stone-100">{t.composition}</h4>
                                         <p className="text-xs text-stone-400">Estimated ideal state for recovery</p>
                                       </div>
                                    </div>
                                    <div className="space-y-4">
-                                      <div className="flex justify-between items-center"><span className="text-sm font-medium text-stone-600 flex items-center">pH Value <InfoTooltip text="Measures soil acidity or alkalinity. Crucial for nutrient availability."/></span> <Badge variant="outline" className="text-leaf bg-leaf/5">{analysisResult.soilFertility.pH}</Badge></div>
-                                      <div className="flex justify-between items-center"><span className="text-sm font-medium text-stone-600 flex items-center">Nitrogen (N)</span> <span className="text-sm font-semibold text-stone-800">{analysisResult.soilFertility.nitrogen}</span></div>
-                                      <div className="flex justify-between items-center"><span className="text-sm font-medium text-stone-600 flex items-center">Phosphorus (P)</span> <span className="text-sm font-semibold text-stone-800">{analysisResult.soilFertility.phosphorus}</span></div>
-                                      <div className="flex justify-between items-center"><span className="text-sm font-medium text-stone-600 flex items-center">Potassium (K)</span> <span className="text-sm font-semibold text-stone-800">{analysisResult.soilFertility.potassium}</span></div>
+                                      <div className="flex justify-between items-center"><span className="text-sm font-medium text-stone-600 dark:text-stone-400 flex items-center">pH Value <InfoTooltip text="Measures soil acidity or alkalinity. Crucial for nutrient availability."/></span> <Badge variant="outline" className="text-leaf bg-leaf/5 dark:bg-leaf/10 border-leaf/20">{analysisResult.soilFertility.pH}</Badge></div>
+                                      <div className="flex justify-between items-center"><span className="text-sm font-medium text-stone-600 dark:text-stone-400 flex items-center">Nitrogen (N)</span> <span className="text-sm font-semibold text-stone-800 dark:text-stone-100">{analysisResult.soilFertility.nitrogen}</span></div>
+                                      <div className="flex justify-between items-center"><span className="text-sm font-medium text-stone-600 dark:text-stone-400 flex items-center">Phosphorus (P)</span> <span className="text-sm font-semibold text-stone-800 dark:text-stone-100">{analysisResult.soilFertility.phosphorus}</span></div>
+                                      <div className="flex justify-between items-center"><span className="text-sm font-medium text-stone-600 dark:text-stone-400 flex items-center">Potassium (K)</span> <span className="text-sm font-semibold text-stone-800 dark:text-stone-100">{analysisResult.soilFertility.potassium}</span></div>
                                       
-                                      <div className="mt-4 pt-4 border-t border-stone-100">
+                                      <div className="mt-4 pt-4 border-t border-stone-100 dark:border-stone-800">
                                          <span className="text-[10px] uppercase font-bold text-stone-400 tracking-wider block mb-1">Recommended Soil Type</span>
-                                         <span className="text-base serif font-medium text-stone-800">{analysisResult.soilFertility.soilType}</span>
+                                         <span className="text-base serif font-medium text-stone-800 dark:text-stone-100">{analysisResult.soilFertility.soilType}</span>
                                       </div>
                                    </div>
                                 </div>
                              </motion.div>
                            )}
-
-                           {/* FERTILIZER TAB */}
+                           
+{/* FERTILIZER TAB */}
                            {activeTab === 'Fertilizer' && (
                              <motion.div key="Fertilizer" initial={{ opacity: 0, x: 5 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -5 }} className="h-full flex flex-col gap-4">
-                                <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm flex flex-col">
-                                   <div className="flex items-center gap-2 mb-4 pb-4 border-b border-stone-100">
-                                      <div className="p-2 bg-stone-100 rounded-lg"><IndianRupee className="w-5 h-5 text-stone-500" /></div>
+                                <div className="bg-white dark:bg-stone-900 p-6 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-sm flex flex-col">
+                                   <div className="flex items-center gap-2 mb-4 pb-4 border-b border-stone-100 dark:border-stone-800">
+                                      <div className="p-2 bg-stone-100 dark:bg-stone-800 rounded-lg"><Droplets className="w-5 h-5 text-stone-500" /></div>
                                       <div>
-                                        <h4 className="text-sm font-bold text-stone-800">{t.cost_estimates}</h4>
-                                        <p className="text-xs text-stone-400">{t.cost_desc}</p>
+                                        <h4 className="text-sm font-bold text-stone-800 dark:text-stone-100">{t.chemical_fertilizer}</h4>
+                                        <p className="text-xs text-stone-400">Precision requirements based on soil synthesis</p>
                                       </div>
                                    </div>
-                                   <div className="space-y-6 flex-1">
-                                      <div className="flex justify-between items-center bg-stone-50 p-3 rounded-xl border border-stone-100">
-                                         <div className="flex flex-col">
-                                            <span className="text-sm font-medium text-stone-700 flex items-center">Urea</span>
-                                            <a href={`https://www.bighaat.com/search?q=Urea`} target="_blank" rel="noreferrer" className="text-[9px] text-leaf font-bold hover:underline">{t.buy_now} →</a>
+                                   <div className="space-y-4 flex-1">
+                                      {Object.entries(analysisResult.fertilizerDetails.chemical).filter(([key]) => key !== 'totalCost').map(([name, data]: [string, any]) => (
+                                         <div key={name} className="p-4 bg-stone-50 dark:bg-stone-800 rounded-xl border border-stone-100 dark:border-stone-700">
+                                            <div className="flex justify-between items-center mb-2">
+                                               <span className="text-sm font-bold text-stone-700 dark:text-stone-300 uppercase tracking-tight">{name}</span>
+                                               <span className="text-xs font-mono font-bold text-leaf">{data.quantity} @ {data.cost}</span>
+                                            </div>
+                                            <p className="text-[11px] text-stone-500 leading-relaxed italic"><span className="font-bold text-stone-400 uppercase tracking-tighter mr-1">{t.effect_on_soil}:</span> {data.effect}</p>
                                          </div>
-                                         <span className="text-sm font-mono font-semibold bg-white border border-stone-200 px-3 py-1 rounded text-stone-800">{analysisResult.fertilizerCost.urea}</span>
-                                      </div>
-                                      <div className="flex justify-between items-center bg-stone-50 p-3 rounded-xl border border-stone-100">
-                                         <div className="flex flex-col">
-                                            <span className="text-sm font-medium text-stone-700 flex items-center">DAP</span>
-                                            <a href={`https://www.bighaat.com/search?q=DAP`} target="_blank" rel="noreferrer" className="text-[9px] text-leaf font-bold hover:underline">{t.buy_now} →</a>
-                                         </div>
-                                         <span className="text-sm font-mono font-semibold bg-white border border-stone-200 px-3 py-1 rounded text-stone-800">{analysisResult.fertilizerCost.dap}</span>
-                                      </div>
-                                      <div className="flex justify-between items-center bg-stone-50 p-3 rounded-xl border border-stone-100">
-                                         <div className="flex flex-col">
-                                            <span className="text-sm font-medium text-stone-700 flex items-center">MOP</span>
-                                            <a href={`https://www.bighaat.com/search?q=MOP`} target="_blank" rel="noreferrer" className="text-[9px] text-leaf font-bold hover:underline">{t.buy_now} →</a>
-                                         </div>
-                                         <span className="text-sm font-mono font-semibold bg-white border border-stone-200 px-3 py-1 rounded text-stone-800">{analysisResult.fertilizerCost.mop}</span>
+                                      ))}
+                                   </div>
+                                   <div className="mt-4">
+                                       <span className="text-[10px] uppercase font-bold text-stone-400 tracking-wider">{t.total_cost}</span>
+                                       <p className="text-2xl font-bold text-leaf serif">{analysisResult.fertilizerDetails.chemical.totalCost}</p>
+                                   </div>
+                                </div>
+
+                                {/* Organic Alternatives Section */}
+                                <div className="bg-green-50/50 dark:bg-green-900/10 p-6 rounded-2xl border border-green-100 dark:border-green-900/30 shadow-sm flex flex-col">
+                                   <div className="flex items-center gap-2 mb-4 pb-4 border-b border-green-100 dark:border-green-900/30">
+                                      <div className="p-2 bg-leaf/10 rounded-lg"><Leaf className="w-5 h-5 text-leaf" /></div>
+                                      <div>
+                                        <h4 className="text-sm font-bold text-green-800 dark:text-green-100">{t.organic_alternatives}</h4>
+                                        <p className="text-xs text-green-600/70">Sustainable & Eco-friendly solutions</p>
                                       </div>
                                    </div>
-                                   <div className="mt-6 pt-4 border-t border-stone-100 flex justify-between items-end">
-                                      <div>
-                                         <span className="text-[10px] uppercase font-bold text-stone-400 tracking-wider">{t.total_cost}</span>
-                                         <p className="text-2xl font-bold text-leaf serif">{analysisResult.fertilizerCost.totalCost}</p>
-                                      </div>
+                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      {analysisResult.fertilizerDetails.organic.map((org, idx) => (
+                                         <div key={idx} className="p-4 bg-white dark:bg-stone-800 rounded-xl border border-green-100 dark:border-stone-700 shadow-sm">
+                                            <h5 className="text-xs font-bold text-green-700 dark:text-green-400 mb-1">{org.name}</h5>
+                                            <p className="text-[10px] text-stone-600 dark:text-stone-400 dark:text-stone-300 mb-2 leading-relaxed"><span className="font-bold text-green-600/70 uppercase tracking-tighter mr-1">{t.benefit}:</span> {org.benefit}</p>
+                                            <p className="text-[10px] text-stone-500 dark:text-stone-400 italic"><span className="font-bold text-stone-400 uppercase tracking-tighter mr-1">{t.application}:</span> {org.application}</p>
+                                         </div>
+                                      ))}
                                    </div>
                                 </div>
                              </motion.div>
                            )}
-
-                           {/* RECOMMENDATIONS TAB */}
+                           
+{/* RECOMMENDATIONS TAB */}
                            {activeTab === 'Recommendations' && (
                              <motion.div key="Recommendations" initial={{ opacity: 0, x: 5 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -5 }} className="flex flex-col gap-6">
-                                <div className="bg-white p-6 rounded-[2rem] border border-stone-200 shadow-sm relative overflow-hidden">
-                                   <div className="flex items-center gap-2 mb-4 pb-4 border-b border-stone-100">
+                                <div className="bg-white dark:bg-stone-900 p-6 rounded-[2rem] border border-stone-200 dark:border-stone-800 shadow-sm relative overflow-hidden">
+                                   <div className="flex items-center gap-2 mb-4 pb-4 border-b border-stone-100 dark:border-stone-800">
                                       <div className="p-2 bg-leaf/10 rounded-lg"><TrendingUp className="w-5 h-5 text-leaf" /></div>
                                       <div>
-                                        <h4 className="text-sm font-bold text-stone-800">{t.prec_rotation}</h4>
+                                        <h4 className="text-sm font-bold text-stone-800 dark:text-stone-100">{t.prec_rotation}</h4>
                                         <p className="text-xs text-stone-400">{t.rotation_desc}</p>
                                       </div>
                                       <Badge className="ml-auto bg-leaf text-white border-none text-[8px] tracking-tighter shadow-sm">{t.kaggle_grounded}</Badge>
                                    </div>
                                    
                                    <div className="flex flex-col gap-6">
-                                      <div className="p-5 bg-[#FDFDFD] rounded-2xl border border-stone-100 shadow-inner">
+                                      <div className="p-5 bg-[#FDFDFD] dark:bg-stone-800 rounded-2xl border border-stone-100 dark:border-stone-700 shadow-inner">
                                          <span className="text-[10px] uppercase font-bold text-stone-400 tracking-wider block mb-2">{t.recommended_next}</span>
                                          <p className="text-3xl serif font-bold text-leaf">{analysisResult.nextCropRecommendation}</p>
-                                         {marketPrice && (
-                                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-3 flex items-center gap-2">
-                                                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-100 font-mono">
-                                                   LIVE MANDI: {marketPrice.price}
-                                                </Badge>
-                                                <span className="text-[10px] text-stone-400 italic">at {marketPrice.market}</span>
-                                            </motion.div>
-                                         )}
+                                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-3 flex flex-wrap gap-2">
+                                             <Badge variant="outline" className="bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-100 dark:border-amber-900/30 font-mono">
+                                                VALUE: {analysisResult.marketInsights.currentPrice}
+                                             </Badge>
+                                             <Badge variant="outline" className="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-blue-100 dark:border-blue-900/30 font-mono capitalize">
+                                                TREND: {analysisResult.marketInsights.priceTrend}
+                                             </Badge>
+                                             <Badge variant="outline" className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-100 dark:border-green-900/30 font-mono capitalize">
+                                                DEMAND: {analysisResult.marketInsights.marketDemand}
+                                             </Badge>
+                                         </motion.div>
                                       </div>
                                       
                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                         <div className="p-5 border border-stone-100 rounded-2xl bg-white shadow-sm">
+                                         <div className="p-5 border border-stone-100 rounded-2xl bg-white dark:bg-stone-900 shadow-sm">
                                             <h5 className="text-[10px] uppercase font-bold text-stone-500 mb-2 flex items-center gap-1.5"><Activity className="w-3 h-3"/> {t.soil_recovery}</h5>
-                                            <p className="text-xs text-stone-600 leading-relaxed">Dataset analysis confirms this crop restores Nitrogen levels depleted by the current pathogen.</p>
+                                            <p className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed">Dataset analysis confirms this crop restores Nitrogen levels depleted by the current pathogen.</p>
                                          </div>
                                          <div className="p-5 border border-leaf/10 rounded-2xl bg-leaf/[0.02] shadow-sm">
                                             <h5 className="text-[10px] uppercase font-bold text-leaf mb-2 flex items-center gap-1.5"><TrendingUp className="w-3 h-3"/> {t.market_outlook}</h5>
-                                            <p className="text-xs text-stone-600 leading-relaxed">Mandi trends indicate high demand, offering higher profit margins.</p>
+                                            <p className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed">Mandi trends indicate high demand, offering higher profit margins.</p>
                                          </div>
                                       </div>
                                    </div>
@@ -1409,64 +1545,99 @@ export default function App() {
 
         {/* CHAT MODE */}
         {viewMode === 'chat' && (
-           <motion.div key="chat-view" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="max-w-[1200px] mx-auto flex flex-col bg-white shadow-2xl rounded-[2rem] border border-stone-200 overflow-hidden h-[75vh] min-h-[500px]">
-              <div className="p-6 border-b border-stone-100 flex items-center justify-between bg-white">
-                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-leaf/10 rounded-full flex items-center justify-center text-leaf"><Activity className="w-6 h-6" /></div>
-                    <div>
-                       <h3 className="serif text-xl font-bold text-stone-800">{t.doctor_ai}</h3>
-                       <p className="text-[10px] text-stone-400 uppercase font-bold tracking-widest">{t.active_expert}</p>
+           <motion.div key="chat-view" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 h-[80vh] min-h-[600px]">
+              
+              {/* Sidebar - Professional Context */}
+              <div className="lg:col-span-3 hidden lg:flex flex-col gap-4">
+                 <div className="bg-white dark:bg-stone-900 p-6 rounded-[2rem] border border-stone-200 dark:border-stone-800 shadow-sm">
+                    <h4 className="text-[10px] uppercase font-bold text-stone-400 mb-4 tracking-widest">Expert Context</h4>
+                    <div className="space-y-4">
+                       <div className="p-4 bg-leaf/5 rounded-xl border border-leaf/10">
+                          <h5 className="text-xs font-bold text-leaf mb-1">Kaggle Grounded</h5>
+                          <p className="text-[10px] text-stone-500 leading-relaxed">Responses are validated against global agricultural disease datasets.</p>
+                       </div>
+                       <div className="p-4 bg-stone-50 dark:bg-stone-800 rounded-xl border border-stone-100 dark:border-stone-700">
+                          <h5 className="text-xs font-bold text-stone-700 dark:text-stone-300 mb-1">Mandi Intelligence</h5>
+                          <p className="text-[10px] text-stone-500 leading-relaxed">Price trends and demand analytics integrated into suggestions.</p>
+                       </div>
+                    </div>
+                 </div>
+
+                 <div className="bg-leaf dark:bg-leaf/90 p-6 rounded-[2rem] text-white shadow-xl shadow-leaf/20">
+                    <div className="flex items-center gap-2 mb-3">
+                       <Activity className="w-5 h-5" />
+                       <h4 className="text-xs font-bold uppercase tracking-widest">System Health</h4>
+                    </div>
+                    <p className="text-[10px] opacity-80 leading-relaxed mb-4">Doctor AI is currently processing regional telemetry for precision advice.</p>
+                    <div className="w-full bg-white/20 h-1 rounded-full overflow-hidden">
+                       <div className="bg-white h-full w-[85%]" style={{ width: '85%' }}></div>
                     </div>
                  </div>
               </div>
-              
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                  {chatMessages.length === 0 && (
-                    <div className="h-full flex flex-col items-center justify-center text-center opacity-60 py-20">
-                       <MessageSquare className="w-16 h-16 mb-4 text-leaf/40" />
-                       <p className="serif text-xl font-medium text-stone-500 italic">"{t.doctor_chat_prompt}"</p>
-                    </div>
-                 )}
-                 {chatMessages.map((msg, idx) => (
-                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                       <div className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-leaf text-white rounded-tr-none' : 'bg-stone-50 text-stone-700 rounded-tl-none border border-stone-100'}`}>
-                          {msg.content}
-                       </div>
-                    </motion.div>
-                 ))}
-                 {isChatting && (
-                    <div className="flex justify-start">
-                       <div className="bg-stone-50 px-4 py-3 rounded-2xl border border-stone-100 flex gap-1">
-                          <div className="w-1.5 h-1.5 bg-stone-300 rounded-full animate-bounce"></div>
-                          <div className="w-1.5 h-1.5 bg-stone-300 rounded-full animate-bounce [animation-delay:0.2s]"></div>
-                          <div className="w-1.5 h-1.5 bg-stone-300 rounded-full animate-bounce [animation-delay:0.4s]"></div>
+
+              {/* Main Chat Area */}
+              <div className="lg:col-span-9 flex flex-col bg-white dark:bg-stone-900 shadow-2xl rounded-[2rem] border border-stone-200 dark:border-stone-800 overflow-hidden h-full">
+                 <div className="p-6 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between bg-white dark:bg-stone-900">
+                    <div className="flex items-center gap-3">
+                       <div className="w-10 h-10 bg-leaf/10 rounded-full flex items-center justify-center text-leaf"><Activity className="w-6 h-6" /></div>
+                       <div>
+                          <h3 className="serif text-xl font-bold text-stone-800 dark:text-stone-100">{t.doctor_ai}</h3>
+                          <p className="text-[10px] text-stone-400 uppercase font-bold tracking-widest">{t.active_expert}</p>
                        </div>
                     </div>
-                 )}
-              </div>
-              
-              <form onSubmit={handleSendMessage} className="p-4 bg-white border-t border-stone-100">
-                 <div className="relative flex items-center gap-2">
-                    <button 
-                        type="button"
-                        onClick={startSpeechRecognition}
-                        className={`p-3 rounded-full transition-all flex-shrink-0 ${isRecording ? 'bg-red-100 text-red-500 animate-pulse' : 'bg-stone-50 text-stone-400 hover:text-leaf hover:bg-stone-100'}`}
-                    >
-                        <Mic className="w-5 h-5" />
-                    </button>
-                    <div className="relative flex-1 flex items-center">
-                        <input 
-                          value={chatInput}
-                          onChange={(e) => setChatInput(e.target.value)}
-                          placeholder={t.chat_placeholder}
-                          className="w-full bg-stone-50 border-none rounded-full py-4 pl-6 pr-14 text-sm focus:ring-2 focus:ring-leaf/20 outline-none transition-all shadow-inner"
-                        />
-                        <button type="submit" disabled={isChatting} className="absolute right-2 p-3 bg-leaf text-white rounded-full shadow-lg shadow-leaf/20 hover:scale-105 active:scale-95 transition-all">
-                           <Send className="w-4 h-4" />
-                        </button>
+                    <div className="flex gap-2">
+                       <Badge variant="outline" className="text-[8px] uppercase tracking-tighter border-leaf/30 text-leaf">Verified Specialist</Badge>
                     </div>
                  </div>
-              </form>
+                 
+                 <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                     {chatMessages.length === 0 && (
+                       <div className="h-full flex flex-col items-center justify-center text-center opacity-60 py-20">
+                          <MessageSquare className="w-16 h-16 mb-4 text-leaf/40" />
+                          <p className="serif text-xl font-medium text-stone-500 italic">"{t.doctor_chat_prompt}"</p>
+                       </div>
+                    )}
+                    {chatMessages.map((msg, idx) => (
+                       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-leaf text-white rounded-tr-none shadow-leaf/20' : 'bg-stone-50 dark:bg-stone-800 text-stone-700 dark:text-stone-300 rounded-tl-none border border-stone-100 dark:border-stone-700'}`}>
+                             {msg.content}
+                          </div>
+                       </motion.div>
+                    ))}
+                    {isChatting && (
+                       <div className="flex justify-start">
+                          <div className="bg-stone-50 dark:bg-stone-800 px-4 py-3 rounded-2xl border border-stone-100 dark:border-stone-700 flex gap-1">
+                             <div className="w-1.5 h-1.5 bg-stone-300 rounded-full animate-bounce"></div>
+                             <div className="w-1.5 h-1.5 bg-stone-300 rounded-full animate-bounce [animation-delay:0.2s]"></div>
+                             <div className="w-1.5 h-1.5 bg-stone-300 rounded-full animate-bounce [animation-delay:0.4s]"></div>
+                          </div>
+                       </div>
+                    )}
+                 </div>
+                 
+                 <form onSubmit={handleSendMessage} className="p-4 bg-white dark:bg-stone-900 border-t border-stone-100 dark:border-stone-800">
+                    <div className="relative flex items-center gap-2">
+                       <button 
+                           type="button"
+                           onClick={() => startSpeechRecognition('chat')}
+                           className={`p-3 rounded-full transition-all flex-shrink-0 ${isRecording ? 'bg-red-100 text-red-500 animate-pulse' : 'bg-stone-50 dark:bg-stone-800 text-stone-400 hover:text-leaf hover:bg-stone-100 dark:hover:bg-stone-700'}`}
+                       >
+                           <Mic className="w-5 h-5" />
+                       </button>
+                       <div className="relative flex-1 flex items-center">
+                           <input 
+                             value={chatInput}
+                             onChange={(e) => setChatInput(e.target.value)}
+                             placeholder={t.chat_placeholder}
+                             className="w-full bg-stone-50 dark:bg-stone-800 dark:text-white border-none rounded-full py-4 pl-6 pr-14 text-sm focus:ring-2 focus:ring-leaf/20 outline-none transition-all shadow-inner"
+                           />
+                           <button type="submit" disabled={isChatting} className="absolute right-2 p-3 bg-leaf text-white rounded-full shadow-lg shadow-leaf/20 hover:scale-105 active:scale-95 transition-all">
+                              <Send className="w-4 h-4" />
+                           </button>
+                       </div>
+                    </div>
+                 </form>
+              </div>
            </motion.div>
         )}
 
@@ -1476,85 +1647,196 @@ export default function App() {
              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Satellite Overview */}
                 <div className="lg:col-span-2 space-y-6">
-                   <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] p-8 shadow-xl border border-white/20">
-                      <div className="flex items-center justify-between mb-8">
-                         <div>
-                            <h2 className="serif text-4xl font-bold text-stone-800 tracking-tight">Satellite Field Overview</h2>
-                            <p className="text-stone-500 text-sm font-medium">Sentinel-2 NDVI Health Monitoring</p>
-                         </div>
-                         <div className="px-4 py-2 bg-green-50 text-green-700 rounded-full text-[10px] font-bold uppercase tracking-widest border border-green-100 flex items-center gap-2">
-                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                            Live Pass: Today
-                         </div>
-                      </div>
+                   <div className="bg-white/80 dark:bg-stone-900/80 backdrop-blur-xl rounded-[2.5rem] p-8 shadow-xl border border-white/20 dark:border-stone-800 relative overflow-hidden">
+                      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-leaf to-transparent animate-scan"></div>
                       
-                      <div className="relative aspect-video rounded-[2rem] overflow-hidden shadow-2xl border-4 border-white">
-                         <img 
-                            src="/ndvi_map.png" 
-                            alt="NDVI Map" 
-                            className="w-full h-full object-cover"
-                         />
-                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
-                         <div className="absolute bottom-6 left-6 right-6 flex items-end justify-between">
-                            <div className="flex gap-4">
-                               <div className="bg-white/10 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/20">
-                                  <p className="text-white/60 text-[10px] font-bold uppercase tracking-wider mb-1">Health Index</p>
-                                  <p className="text-white text-2xl font-bold">0.72 <span className="text-xs text-green-400 font-medium">Excellent</span></p>
-                               </div>
-                               <div className="bg-white/10 backdrop-blur-md px-4 py-3 rounded-2xl border border-white/20">
-                                  <p className="text-white/60 text-[10px] font-bold uppercase tracking-wider mb-1">Moisture</p>
-                                  <p className="text-white text-2xl font-bold">84% <span className="text-xs text-blue-400 font-medium">Optimal</span></p>
-                               </div>
+                      <div className="flex justify-between items-center mb-8 relative z-10">
+                        <div>
+                          <h2 className="serif text-4xl font-bold text-stone-800 dark:text-stone-100 tracking-tight">Neural Field Monitor</h2>
+                          <div className="flex items-center gap-2 mt-1">
+                             <div className="w-2 h-2 bg-leaf rounded-full animate-pulse"></div>
+                             <span className="text-[10px] font-bold text-leaf uppercase tracking-[0.2em]">Live Satellite Stream</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                           <p className="text-[10px] font-mono text-stone-400 uppercase">Coordinate Lock</p>
+                           <p className="text-sm font-mono font-bold text-stone-600 dark:text-stone-300">{userCoords ? `${userCoords.latitude.toFixed(4)}° N, ${userCoords.longitude.toFixed(4)}° E` : 'Searching...'}</p>
+                        </div>
+                      </div>
+
+                      {/* Map Container with Scanning Effect */}
+                      <div className="relative aspect-video rounded-[2rem] overflow-hidden bg-stone-100 dark:bg-stone-950 border border-stone-200 dark:border-stone-800 shadow-inner group">
+                         <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1200&auto=format&fit=crop')] bg-cover bg-center transition-transform duration-[10s] group-hover:scale-110"></div>
+                         
+                         {/* Grid Overlay */}
+                         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/grid-me.png')] opacity-20 pointer-events-none"></div>
+                         
+                         {/* Radar Sweep */}
+                         <div className="absolute inset-0 pointer-events-none">
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[200%] h-[200%] bg-gradient-conic from-leaf/10 to-transparent animate-spin-slow"></div>
+                         </div>
+
+                         {/* Data Points */}
+                         <div className="absolute top-1/4 left-1/3 w-4 h-4 bg-leaf rounded-full shadow-[0_0_20px_rgba(34,197,94,0.8)] animate-pulse"></div>
+                         <div className="absolute bottom-1/3 right-1/4 w-3 h-3 bg-amber-400 rounded-full shadow-[0_0_15px_rgba(251,191,36,0.6)] animate-ping"></div>
+
+                         <div className="absolute bottom-6 left-6 right-6 bg-black/40 backdrop-blur-md p-4 rounded-2xl border border-white/10 flex justify-around text-white">
+                            <div className="text-center">
+                               <p className="text-[8px] uppercase tracking-widest opacity-60">Vegetation (NDVI)</p>
+                               <p className="text-lg font-bold">0.82 <span className="text-[10px] text-leaf">↑</span></p>
                             </div>
-                            <button className="bg-white text-stone-800 px-6 py-3 rounded-full font-bold text-xs uppercase tracking-widest shadow-xl hover:scale-105 transition-all">Download Report</button>
+                            <div className="text-center border-x border-white/10 px-6">
+                               <p className="text-[8px] uppercase tracking-widest opacity-60">Moisture Index</p>
+                               <p className="text-lg font-bold">64%</p>
+                            </div>
+                            <div className="text-center">
+                               <p className="text-[8px] uppercase tracking-widest opacity-60">Nitrogen Sink</p>
+                               <p className="text-lg font-bold">Optimal</p>
+                            </div>
                          </div>
                       </div>
+
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 relative z-10">
+                         {[
+                           { label: 'Soil Temp', value: '24.2°C', icon: Thermometer },
+                           { label: 'Leaf Wetness', value: 'Normal', icon: Droplets },
+                           { label: 'Solar Flux', value: 'High', icon: Sun },
+                           { label: 'Wind Direction', value: 'NW', icon: Wind }
+                         ].map((stat, i) => (
+                           <div key={i} className="p-4 bg-stone-50 dark:bg-stone-800/50 rounded-2xl border border-stone-100 dark:border-stone-800 shadow-sm flex flex-col items-center gap-2">
+                              <stat.icon className="w-5 h-5 text-leaf/60" />
+                              <p className="text-[9px] uppercase font-bold text-stone-400 tracking-wider">{stat.label}</p>
+                              <p className="text-sm font-bold text-stone-700 dark:text-stone-200">{stat.value}</p>
+                           </div>
+                         ))}
+                      </div>
+                   </div>
+
+                   <div className="flex justify-center">
+                      <button className="bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100 border border-stone-200 dark:border-stone-800 px-8 py-4 rounded-full font-bold text-xs uppercase tracking-widest shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2 group">
+                         <CloudRain className="w-4 h-4 text-leaf group-hover:animate-bounce" />
+                         Generate Precision Report
+                      </button>
                    </div>
                 </div>
 
-                {/* Environmental Alerts */}
+                {/* Right Column: Alerts & Local Market */}
                 <div className="space-y-6">
-                   <div className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] p-8 shadow-xl border border-white/20">
-                      <div className="flex items-center gap-3 mb-8">
-                         <div className="w-10 h-10 bg-amber-50 rounded-full flex items-center justify-center text-amber-600"><AlertCircle className="w-6 h-6" /></div>
-                         <div>
-                            <h3 className="serif text-xl font-bold text-stone-800">Weather Risk Alerts</h3>
-                            <p className="text-[10px] text-stone-400 uppercase font-bold tracking-widest">Hyper-Local Intelligence</p>
-                         </div>
-                      </div>
-
-                      <div className="space-y-4">
-                         <div className="p-5 bg-red-50 rounded-3xl border border-red-100">
-                            <div className="flex items-center justify-between mb-2">
-                               <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[8px] font-black uppercase tracking-tighter rounded">High Risk</span>
-                               <span className="text-[10px] text-red-400 font-bold">Next 48h</span>
-                            </div>
-                            <h4 className="font-bold text-stone-800 mb-1">Intense Heatwave Detected</h4>
-                            <p className="text-xs text-stone-500 leading-relaxed">Temperature expected to reach 42°C. Increase irrigation frequency for all tomato and chilli plots.</p>
-                         </div>
-
-                         <div className="p-5 bg-blue-50 rounded-3xl border border-blue-100">
-                            <div className="flex items-center justify-between mb-2">
-                               <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[8px] font-black uppercase tracking-tighter rounded">Moderate</span>
-                               <span className="text-[10px] text-blue-400 font-bold">Thursday</span>
-                            </div>
-                            <h4 className="font-bold text-stone-800 mb-1">Unseasonal Rain Forecast</h4>
-                            <p className="text-xs text-stone-500 leading-relaxed">Scattered showers expected. Delay any pesticide application until Friday morning.</p>
-                         </div>
+                   <div className="bg-white dark:bg-stone-900 rounded-[2.5rem] p-8 shadow-xl border border-stone-200 dark:border-stone-800 relative overflow-hidden">
+                      <div className="flex items-center gap-3 mb-6">
+                         <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-xl"><AlertCircle className="w-6 h-6 text-red-500" /></div>
+                         <h3 className="serif text-xl font-bold text-stone-800 dark:text-stone-100">Regional Outbreaks</h3>
                       </div>
                       
-                      <div className="mt-8 pt-8 border-t border-stone-100">
-                         <div className="flex items-center justify-between mb-4">
-                            <span className="text-xs font-bold text-stone-400 uppercase tracking-widest">Environment Status</span>
-                            <span className="text-xs font-bold text-stone-800">28°C / 65% Humidity</span>
+                      <div className="space-y-4">
+                         <div className="p-4 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/20 rounded-2xl">
+                            <h4 className="text-xs font-bold text-red-600 dark:text-red-400 mb-1 flex items-center gap-2"><div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping"></div> Intense Heatwave Detected</h4>
+                            <p className="text-[10px] text-stone-500 dark:text-stone-400 leading-relaxed">System-wide irrigation boost recommended for the next 48 hours to prevent wilting.</p>
                          </div>
-                         <div className="h-2 w-full bg-stone-100 rounded-full overflow-hidden">
-                            <div className="h-full bg-amber-500 w-[60%]"></div>
+                         <div className="p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/20 rounded-2xl">
+                            <h4 className="text-xs font-bold text-amber-600 dark:text-amber-400 mb-1">Unseasonal Rain Forecast</h4>
+                            <p className="text-[10px] text-stone-500 dark:text-stone-400 leading-relaxed">30mm precipitation expected by Saturday. Delay chemical spraying to avoid runoff.</p>
                          </div>
+                      </div>
+                   </div>
+
+                   <div className="bg-stone-950 rounded-[2.5rem] p-8 shadow-2xl text-white relative overflow-hidden group">
+                      <div className="absolute inset-0 bg-gradient-to-br from-leaf/20 to-transparent opacity-50"></div>
+                      <div className="relative z-10">
+                        <div className="flex justify-between items-start mb-6">
+                           <div>
+                              <h3 className="serif text-xl font-bold mb-1">Mandi Outlook</h3>
+                              <p className="text-[10px] opacity-60 uppercase tracking-widest font-bold">Market Intelligence</p>
+                           </div>
+                           <div className="p-2 bg-white/10 rounded-xl backdrop-blur-md"><Activity className="w-5 h-5 text-leaf" /></div>
+                        </div>
+
+                        <div className="space-y-4">
+                           <div className="flex justify-between items-center py-2 border-b border-white/10">
+                              <span className="text-xs opacity-80">Present Cost</span>
+                              <span className="text-xs font-bold">₹ 2,450 / Quintal</span>
+                           </div>
+                           <div className="flex justify-between items-center py-2 border-b border-white/10">
+                              <span className="text-xs opacity-80">Demand Index</span>
+                              <Badge className="bg-leaf text-[8px] font-bold shadow-lg shadow-leaf/30">VERY HIGH</Badge>
+                           </div>
+                           <div className="flex justify-between items-center py-2">
+                              <span className="text-xs opacity-80">Price Trajectory</span>
+                              <span className="text-xs font-bold text-leaf">+ 12% This Week</span>
+                           </div>
+                        </div>
+
+                        <button className="w-full mt-6 py-3 bg-white text-stone-900 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-leaf hover:text-white transition-all shadow-xl">View Full Market Trends</button>
                       </div>
                    </div>
                 </div>
              </div>
+          </motion.div>
+        )}
+        {/* ABOUT US MODE */}
+        {viewMode === 'about' && (
+          <motion.div 
+            key="about-view" 
+            initial={{ opacity: 0, y: 20 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            exit={{ opacity: 0, y: -20 }} 
+            className="max-w-[1000px] mx-auto"
+          >
+            <div className="glass-card p-12 rounded-[3rem] shadow-2xl border border-stone-200 dark:border-stone-800 bg-white/70 dark:bg-stone-900/70 backdrop-blur-xl relative overflow-hidden">
+               {/* Decorative Elements */}
+               <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-bl-full -z-10 blur-3xl animate-pulse"></div>
+               <div className="absolute bottom-0 left-0 w-64 h-64 bg-leaf/10 rounded-tr-full -z-10 blur-3xl animate-pulse"></div>
+               
+               <div className="flex flex-col items-center text-center gap-8">
+                  <motion.div 
+                    initial={{ scale: 0.8 }} 
+                    animate={{ scale: 1 }} 
+                    className="w-32 h-32 bg-white dark:bg-stone-800 rounded-full shadow-2xl flex items-center justify-center border-4 border-indigo-100 dark:border-stone-700"
+                  >
+                     <Info className="w-16 h-16 text-indigo-600" />
+                  </motion.div>
+                  
+                  <div>
+                    <h2 className="serif text-5xl font-bold text-stone-800 dark:text-stone-100 tracking-tight mb-4">{t.about_us}</h2>
+                    <p className="text-stone-500 dark:text-stone-400 text-lg max-w-2xl mx-auto leading-relaxed">
+                      Botanica is an advanced agricultural intelligence platform designed to empower farmers with state-of-the-art AI diagnostics, soil analysis, and real-time market telemetry.
+                    </p>
+                  </div>
+                  
+                  <div className="w-full h-px bg-gradient-to-r from-transparent via-stone-200 dark:via-stone-700 to-transparent my-4"></div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-3xl">
+                     <motion.div 
+                        whileHover={{ y: -5 }}
+                        className="bg-white/50 dark:bg-stone-800/50 p-8 rounded-3xl border border-stone-100 dark:border-stone-700 shadow-sm flex flex-col items-center gap-4"
+                     >
+                        <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                           <Sprout className="w-6 h-6" />
+                        </div>
+                        <h3 className="text-[10px] uppercase font-bold tracking-widest text-stone-400">Developer Name</h3>
+                        <p className="serif text-2xl font-bold text-stone-800 dark:text-stone-100">K Uday Bhaskar</p>
+                     </motion.div>
+                     
+                     <motion.div 
+                        whileHover={{ y: -5 }}
+                        className="bg-white/50 dark:bg-stone-800/50 p-8 rounded-3xl border border-stone-100 dark:border-stone-700 shadow-sm flex flex-col items-center gap-4"
+                     >
+                        <div className="w-12 h-12 bg-leaf/5 dark:bg-leaf/10 rounded-2xl flex items-center justify-center text-leaf">
+                           <Globe className="w-6 h-6" />
+                        </div>
+                        <h3 className="text-[10px] uppercase font-bold tracking-widest text-stone-400">Direct Email</h3>
+                        <p className="text-xl font-medium text-indigo-600 dark:text-indigo-400 hover:underline">
+                           <a href="mailto:udayvenkatkalle7@gmail.com">udayvenkatkalle7@gmail.com</a>
+                        </p>
+                     </motion.div>
+                  </div>
+                  
+                  <div className="flex gap-4 mt-4">
+                     <div className="px-6 py-2 bg-stone-100 dark:bg-stone-800 rounded-full text-[10px] font-bold text-stone-500 uppercase tracking-widest">v2.4.0 Stable</div>
+                     <div className="px-6 py-2 bg-leaf/10 text-leaf rounded-full text-[10px] font-bold uppercase tracking-widest">Cloud Enabled</div>
+                  </div>
+               </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
