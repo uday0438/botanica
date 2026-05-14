@@ -15,7 +15,7 @@ const weatherApiKey = process.env.OPENWEATHER_API_KEY;
 
 const genAI = new GoogleGenerativeAI(apiKey || "");
 // Use 1.5 Flash as primary for maximum stability/availability
-const MODELS = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-flash-latest"];
+const MODELS = ["gemini-1.5-flash-latest", "gemini-1.5-flash", "gemini-1.5-pro-latest", "gemini-1.5-pro", "gemini-2.0-flash-exp"];
 
 const safetySettings = [
   { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
