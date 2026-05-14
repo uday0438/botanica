@@ -1,7 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { knowledgeBase, datasetReference, soilReference, marketReference } from './data.js';
 
 dotenv.config();
@@ -10,62 +9,28 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
-// Sanitize the API Key to prevent 404 errors caused by hidden spaces
 const apiKey = (process.env.GEMINI_API_KEY || "").trim();
 const weatherApiKey = (process.env.OPENWEATHER_API_KEY || "").trim();
 
-const genAI = new GoogleGenerativeAI(apiKey);
-
-// Comprehensive list of model names to handle regional and SDK version differences
-const MODELS = [
-    "gemini-1.5-flash",
-    "gemini-1.5-flash-latest",
-    "gemini-1.5-pro",
-    "gemini-2.0-flash-exp",
-    "gemini-pro-vision" 
-];
-
-const safetySettings = [
-  { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-];
-
-function getModel(modelName: string, jsonMode = false) {
-    const config: any = {};
-    if (jsonMode) config.responseMimeType = "application/json";
-    return genAI.getGenerativeModel({ 
-        model: modelName, 
-        generationConfig: config,
-        safetySettings 
+// ==================== DIRECT API UTILITY ====================
+async function callGeminiDirect(payload: any, model = "gemini-1.5-flash") {
+    // Using the STABLE v1 endpoint for maximum compatibility
+    const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`;
+    
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
     });
-}
 
-async function generateWithFallback(buildRequest: (modelName: string) => Promise<any>): Promise<any> {
-    let lastError: any;
-    for (const modelName of MODELS) {
-        try {
-            console.log(`🤖 Attempting analysis with ${modelName}`);
-            return await buildRequest(modelName);
-        } catch (error: any) {
-            console.error(`❌ Error with ${modelName}:`, error.message);
-            lastError = error;
-            
-            // CONTINUE if the model is missing (404), overloaded (429/503), or has a server error (500)
-            const status = error?.status || 0;
-            const message = (error?.message || "").toLowerCase();
-            
-            if (status === 404 || status === 429 || status === 503 || status === 504 || status === 500 || message.includes("not found")) {
-                console.log(`🔄 Fallback: ${modelName} unavailable, trying next...`);
-                continue;
-            }
-            
-            // If it's a different type of error (like an invalid key), stop and report it
-            throw error;
-        }
+    const data: any = await response.json();
+    
+    if (!response.ok) {
+        console.error("Direct API Error:", data);
+        throw new Error(data.error?.message || `API Error ${response.status}`);
     }
-    throw lastError || new Error('All models exhausted. Please check your API key permissions.');
+
+    return data;
 }
 
 function safeParseJSON(text: string) {
@@ -114,25 +79,25 @@ app.post('/api/analyze', async (req, res) => {
         
         Respond in ${language}. If unsure, provide best estimate based on symptoms.`;
 
-        const imageParts = images.map((img: any) => ({
-            inlineData: { data: img.data, mimeType: img.mimeType || 'image/jpeg' }
-        }));
+        const contents = [{
+            parts: [
+                { text: prompt },
+                ...images.map((img: any) => ({
+                    inlineData: { data: img.data, mimeType: img.mimeType || 'image/jpeg' }
+                }))
+            ]
+        }];
 
-        const result = await generateWithFallback(async (modelName) => {
-            const model = getModel(modelName, true);
-            return await model.generateContent([prompt, ...imageParts]);
-        });
-
-        const text = result.response.text();
+        // Try stable v1 first
+        const result = await callGeminiDirect({ contents });
+        const text = result.candidates[0].content.parts[0].text;
         const parsed = safeParseJSON(text);
         
-        if (!parsed || !parsed.diseaseResult) {
-            throw new Error("AI returned incomplete or malformed diagnostic data.");
-        }
-
+        if (!parsed) throw new Error("AI returned malformed data.");
         res.json(parsed);
+
     } catch (error: any) {
-        console.error("🔥 Analysis Critical Failure:", error);
+        console.error("Analysis Failure:", error);
         res.status(500).json({ error: error.message || "Diagnostic engine failed" });
     }
 });
@@ -140,18 +105,18 @@ app.post('/api/analyze', async (req, res) => {
 app.post('/api/chat', async (req, res) => {
     try {
         const { message, history = [], language = 'English' } = req.body;
-        const systemPrompt = `You are Doctor AI, an agricultural expert. Respond in ${language}.`;
-        const result = await generateWithFallback(async (modelName) => {
-            const model = getModel(modelName);
-            const chat = model.startChat({
-                history: history.map((h: any) => ({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: h.content }] })),
-                safetySettings
-            });
-            return await chat.sendMessage(systemPrompt + "\n\nUser: " + message);
-        });
-        res.json({ response: result.response.text() });
+        const contents = [
+            ...history.map((h: any) => ({
+                role: h.role === 'user' ? 'user' : 'model',
+                parts: [{ text: h.content }]
+            })),
+            { role: 'user', parts: [{ text: `You are Doctor AI. Respond in ${language}. User says: ${message}` }] }
+        ];
+
+        const result = await callGeminiDirect({ contents });
+        res.json({ response: result.candidates[0].content.parts[0].text });
     } catch (error: any) {
-        res.json({ response: "AI is currently busy. Please try again in a moment." });
+        res.json({ response: "AI is busy. Please try again." });
     }
 });
 
@@ -169,30 +134,22 @@ app.post('/api/alerts', async (req, res) => {
             } catch (e) {}
         }
 
-        const prompt = `Based on lat:${latitude}, lon:${longitude}, weather:${JSON.stringify(weatherData)}, provide agricultural alerts in JSON: { "region": "name", "alerts": ["a1"], "weather": { "temp": "25C", "humidity": "60%", "condition": "Clear" } }. Respond in ${language}.`;
-
-        const result = await generateWithFallback(async (modelName) => {
-            const model = getModel(modelName, true);
-            return await model.generateContent(prompt);
-        });
-
-        res.json(safeParseJSON(result.response.text()));
+        const prompt = `Provide agricultural alerts for lat:${latitude}, lon:${longitude}, weather:${JSON.stringify(weatherData)} in JSON: { "region": "name", "alerts": ["a1"], "weather": { "temp": "25C", "humidity": "60%", "condition": "Clear" } }. Respond in ${language}.`;
+        const result = await callGeminiDirect({ contents: [{ parts: [{ text: prompt }] }] });
+        res.json(safeParseJSON(result.candidates[0].content.parts[0].text));
     } catch (error: any) {
-        res.json({ "region": "Current Location", "alerts": ["No immediate risk"], "weather": { "temp": "N/A", "humidity": "N/A", "condition": "Cloudy" } });
+        res.json({ "region": "Current Location", "alerts": ["No risk"], "weather": { "temp": "N/A", "humidity": "N/A", "condition": "Cloudy" } });
     }
 });
 
 app.post('/api/encyclopedia', async (req, res) => {
     try {
         const { query, language = 'English' } = req.body;
-        const prompt = `Provide info for "${query}" in JSON with cropName, scientificName, description, growthCycle, commonDiseases, idealSoil, optimalHarvest, imageUrl. Respond in ${language}.`;
-        const result = await generateWithFallback(async (modelName) => {
-            const model = getModel(modelName, true);
-            return await model.generateContent(prompt);
-        });
-        res.json(safeParseJSON(result.response.text()));
+        const prompt = `Info for "${query}" in JSON with cropName, scientificName, description, growthCycle, commonDiseases, idealSoil, optimalHarvest, imageUrl. Respond in ${language}.`;
+        const result = await callGeminiDirect({ contents: [{ parts: [{ text: prompt }] }] });
+        res.json(safeParseJSON(result.candidates[0].content.parts[0].text));
     } catch (error) {
-        res.status(500).json({ error: "Failed to fetch data" });
+        res.status(500).json({ error: "Data unavailable" });
     }
 });
 
@@ -203,10 +160,6 @@ app.post('/api/market', async (req, res) => {
         return res.json({ price: `₹${localData.avg_price}/quintal`, market: localData.top_mandi, trend: localData.trend, isSimulated: true });
     }
     res.json({ price: "₹2,500/quintal", market: "Regional Mandi", isSimulated: true });
-});
-
-app.post('/api/satellite', async (req, res) => {
-    res.json({ ndvi_score: 0.72 + (Math.random() * 0.1), health_status: "Vibrant / Optimal", moisture_index: "84%", surface_temp: "26.4°C", last_pass: new Date().toLocaleDateString(), map_url: "/ndvi_map.png" });
 });
 
 app.get('/api/health', (req, res) => {
