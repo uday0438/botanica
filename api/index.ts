@@ -51,11 +51,40 @@ function safeParseJSON(text: string) {
 app.post('/api/analyze', async (req, res) => {
     try {
         const { images, language = 'English' } = req.body;
-        let prompt = `Analyze these images using grounding data:
-        [PLANTS] ${JSON.stringify(datasetReference)}
-        [SOIL/FERT] ${JSON.stringify(soilReference)}
-        Return JSON with plantName, diseaseResult, solution, preventiveMeasures, soilFertility, fertilizerCost, nextCropRecommendation. 
-        CRITICAL: All descriptive text values MUST be in ${language}. Ensure the "plantName" is the common name in ${language}.`;
+                let prompt = `You are a world-class agricultural pathologist. Analyze the provided images of plants/soil.
+        
+        GROUNDING DATA:
+        - PLANTS: ${JSON.stringify(datasetReference)}
+        - SOIL/FERT: ${JSON.stringify(soilReference)}
+        - MARKET: ${JSON.stringify(marketReference)}
+
+        REQUIRED OUTPUT FORMAT (JSON):
+        {
+          "plantName": "Common name of the plant",
+          "diseaseResult": "Specific name of the disease or 'Healthy'",
+          "solution": "Immediate treatment or management steps",
+          "preventiveMeasures": ["Step 1", "Step 2"],
+          "soilFertility": "Current status (e.g., Optimal, Nitrogen Deficient)",
+          "fertilizerDetails": {
+             "chemical": {
+                "urea": { "quantity": "amount", "cost": "price", "effect": "reasoning" },
+                "dap": { "quantity": "amount", "cost": "price", "effect": "reasoning" },
+                "mop": { "quantity": "amount", "cost": "price", "effect": "reasoning" },
+                "totalCost": "total currency string"
+             },
+             "organic": [
+                { "name": "Alternative name", "benefit": "description", "application": "how-to" }
+             ]
+          },
+          "marketInsights": {
+             "currentPrice": "value/unit",
+             "priceTrend": "Rising/Falling/Stable",
+             "marketDemand": "High/Low/Critical"
+          },
+          "nextCropRecommendation": "Name of best crop to plant next"
+        }
+
+        CRITICAL: Respond ONLY in valid JSON. All descriptive text must be in ${language}.`;
 
         const imageParts = images.map((img: any) => ({
             inlineData: { data: img.data, mimeType: img.mimeType || 'image/jpeg' }
@@ -66,7 +95,15 @@ app.post('/api/analyze', async (req, res) => {
             return await model.generateContent([prompt, ...imageParts]);
         });
 
-        res.json(safeParseJSON(result.response.text()));
+        const text = result.response.text();
+        const parsed = safeParseJSON(text);
+        
+        if (!parsed || !parsed.diseaseResult) {
+            console.error("Invalid AI response:", text);
+            throw new Error("AI returned invalid JSON structure");
+        }
+
+        res.json(parsed);
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
