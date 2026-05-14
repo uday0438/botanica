@@ -4,10 +4,6 @@ export const knowledgeBase = {
     { "soil_type": "Loamy", "crop_type": "Tomato", "issue": "Phosphorus Deficiency", "recommendation": "DAP (Diammonium Phosphate)", "dosage": "50 kg/acre", "scientific_reason": "DAP provides immediate P for root development." },
     { "soil_type": "Black", "crop_type": "Cotton", "issue": "Potassium Deficiency", "recommendation": "MOP (Muriate of Potash)", "dosage": "40 kg/acre", "scientific_reason": "Black soil is rich in clay but can lack available K." },
     { "soil_type": "Clayey", "crop_type": "Rice", "issue": "Zinc Deficiency", "recommendation": "Zinc Sulphate", "dosage": "10 kg/acre", "scientific_reason": "Clayey soils often bind micronutrients." }
-  ],
-  "market_trends": [
-    { "crop": "Groundnut", "region": "South India", "avg_price_inr": 6500, "trend": "Rising" },
-    { "crop": "Soybean", "region": "Central India", "avg_price_inr": 4800, "trend": "Stable" }
   ]
 };
 
@@ -24,12 +20,7 @@ export const datasetReference = {
   },
   "fruits_360": {
     "classes": [
-      "Apple (Crimson Snow, Golden, Red Delicious)",
-      "Banana (Yellow, Red)",
-      "Berries (Blackberry, Blueberry, Strawberry)",
-      "Citrus (Lemon, Lime, Orange)",
-      "Tropical (Mango, Papaya, Pineapple, Pomegranate)",
-      "Vegetables (Cabbage, Carrot, Cucumber, Eggplant, Onion, Potato, Tomato)"
+      "Apple (Crimson Snow, Golden, Red Delicious)", "Banana (Yellow, Red)", "Berries (Blackberry, Blueberry, Strawberry)", "Citrus (Lemon, Lime, Orange)", "Tropical (Mango, Papaya, Pineapple, Pomegranate)", "Vegetables (Cabbage, Carrot, Cucumber, Eggplant, Onion, Potato, Tomato)"
     ]
   }
 };
@@ -52,11 +43,11 @@ export const soilReference = {
 export const marketReference = {
   "market_telemetry": {
     "commodities": [
-      { "name": "Tomato", "avg_price": 2800, "top_mandi": "Kolar (Karnataka)", "trend": "Rising" },
-      { "name": "Onion", "avg_price": 3200, "top_mandi": "Lasalgaon (Maharashtra)", "trend": "Stable" },
-      { "name": "Rice (Basmati)", "avg_price": 6500, "top_mandi": "Karnal (Haryana)", "trend": "Rising" },
-      { "name": "Wheat", "avg_price": 2450, "top_mandi": "Khanna (Punjab)", "trend": "Stable" },
-      { "name": "Chilli (Red)", "avg_price": 18000, "top_mandi": "Guntur (Andhra Pradesh)", "trend": "Rising" }
+      { "name": "Tomato", "avg_price": 2800, "top_mandi": "Kolar (Karnataka)", "trend": "Rising", "demand": "VERY HIGH" },
+      { "name": "Onion", "avg_price": 3200, "top_mandi": "Lasalgaon (Maharashtra)", "trend": "Stable", "demand": "HIGH" },
+      { "name": "Rice (Basmati)", "avg_price": 6500, "top_mandi": "Karnal (Haryana)", "trend": "Rising", "demand": "CRITICAL" },
+      { "name": "Wheat", "avg_price": 2450, "top_mandi": "Khanna (Punjab)", "trend": "Stable", "demand": "MODERATE" },
+      { "name": "Chilli (Red)", "avg_price": 18000, "top_mandi": "Guntur (Andhra Pradesh)", "trend": "Rising", "demand": "HIGH" }
     ]
   }
 };
