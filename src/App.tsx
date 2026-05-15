@@ -1859,7 +1859,7 @@ export default function App() {
                          </div>
                          <h3 className="text-[10px] uppercase font-bold tracking-widest text-stone-400">Live Platform</h3>
                          <p className="text-xl font-medium text-leaf hover:underline">
-                            <a href="https://botanica-smart.vercel.app/" target="_blank" rel="noopener noreferrer">botanica-smart.vercel.app</a>
+                            <a href="https://botanica-green.vercel.app/" target="_blank" rel="noopener noreferrer">botanica-green.vercel.app</a>
                          </p>
                       </motion.div>
 
