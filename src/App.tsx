@@ -7,7 +7,7 @@ import {
   Sprout, IndianRupee, History, Star,
   MessageSquare, ChevronLeft, Send, CheckCircle2, X,
   Share2, MapPin, BookOpen, GitCompare, TrendingUp, Activity, Camera, Mic, Globe, AlertCircle,
-  Sun, Moon, Volume2, Square
+  Sun, Moon, Volume2, Square, Mail
 } from 'lucide-react';
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { Toaster, toast } from 'sonner';
@@ -1850,19 +1850,32 @@ export default function App() {
                         <p className="serif text-2xl font-bold text-stone-800 dark:text-stone-100">K Uday Bhaskar</p>
                      </motion.div>
                      
-                     <motion.div 
-                        whileHover={{ y: -5 }}
-                        className="bg-white/50 dark:bg-stone-800/50 p-8 rounded-3xl border border-stone-100 dark:border-stone-700 shadow-sm flex flex-col items-center gap-4"
-                     >
-                        <div className="w-12 h-12 bg-leaf/5 dark:bg-leaf/10 rounded-2xl flex items-center justify-center text-leaf">
-                           <Globe className="w-6 h-6" />
-                        </div>
-                        <h3 className="text-[10px] uppercase font-bold tracking-widest text-stone-400">Direct Email</h3>
-                        <p className="text-xl font-medium text-indigo-600 dark:text-indigo-400 hover:underline">
-                           <a href="mailto:udayvenkatkalle7@gmail.com">udayvenkatkalle7@gmail.com</a>
-                        </p>
-                     </motion.div>
-                  </div>
+                      <motion.div 
+                         whileHover={{ y: -5 }}
+                         className="bg-white/50 dark:bg-stone-800/50 p-8 rounded-3xl border border-stone-100 dark:border-stone-700 shadow-sm flex flex-col items-center gap-4"
+                      >
+                         <div className="w-12 h-12 bg-leaf/5 dark:bg-leaf/10 rounded-2xl flex items-center justify-center text-leaf">
+                            <Globe className="w-6 h-6" />
+                         </div>
+                         <h3 className="text-[10px] uppercase font-bold tracking-widest text-stone-400">Live Platform</h3>
+                         <p className="text-xl font-medium text-leaf hover:underline">
+                            <a href="https://botanica-smart.vercel.app/" target="_blank" rel="noopener noreferrer">botanica-smart.vercel.app</a>
+                         </p>
+                      </motion.div>
+
+                      <motion.div 
+                         whileHover={{ y: -5 }}
+                         className="bg-white/50 dark:bg-stone-800/50 p-8 rounded-3xl border border-stone-100 dark:border-stone-700 shadow-sm flex flex-col items-center gap-4"
+                      >
+                         <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                            <Mail className="w-6 h-6" />
+                         </div>
+                         <h3 className="text-[10px] uppercase font-bold tracking-widest text-stone-400">Direct Email</h3>
+                         <p className="text-xl font-medium text-indigo-600 dark:text-indigo-400 hover:underline">
+                            <a href="mailto:udayvenkatkalle7@gmail.com">udayvenkatkalle7@gmail.com</a>
+                         </p>
+                      </motion.div>
+                   </div>
                   
                   <div className="flex gap-4 mt-4">
                      <div className="px-6 py-2 bg-stone-100 dark:bg-stone-800 rounded-full text-[10px] font-bold text-stone-500 uppercase tracking-widest">v2.4.0 Stable</div>
