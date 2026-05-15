@@ -2,8 +2,6 @@
 
 Botanica is a premium, AI-driven agricultural management dashboard designed to empower farmers with state-of-the-art diagnostics, real-time market telemetry, and precision soil analysis.
 
-### 🚀 Live Demo
-**Check out the live application here:** [https://botanica-green.vercel.app/](https://botanica-green.vercel.app/)
 
 ---
 
